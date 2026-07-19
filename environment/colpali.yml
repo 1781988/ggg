@@ -1,0 +1,15 @@
+name: adacolrag-colpali
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - colpali-engine==0.3.16
+      - datasets>=3,<5
+      - pillow>=10,<13
+      - tqdm>=4.66,<5
+      - numpy>=1.26,<3
+      - PyYAML>=6,<7
