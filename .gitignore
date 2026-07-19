@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+artifacts/
+data/
+results/real/
+results/smoke_actual.json
+*.egg-info/
+dist/
+build/
