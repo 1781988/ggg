@@ -1,0 +1,17 @@
+seed: 42
+mode: adaptive
+candidate_pool: 50
+fallback_pool: 100
+top_k: 10
+min_tokens: 32
+max_tokens: 128
+selector:
+  relevance_weight: 1.0
+  redundancy_weight: 0.25
+  layout_weight: 0.10
+fusion:
+  dense_weight: 0.0
+  lexical_weight: 0.0
+fallback:
+  enabled: true
+  use_full_tokens: true
