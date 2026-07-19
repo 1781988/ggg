@@ -1,0 +1,9 @@
+seed: 42
+mode: dense
+candidate_pool: 100000
+top_k: 10
+fusion:
+  dense_weight: 1.0
+  lexical_weight: 0.0
+fallback:
+  enabled: false
