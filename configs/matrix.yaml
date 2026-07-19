@@ -1,0 +1,31 @@
+experiments:
+  - id: visrag_dense
+    config: configs/visrag_dense.yaml
+    requires_dense: true
+  - id: colpali_full
+    config: configs/colpali_full.yaml
+    requires_dense: false
+  - id: fixed_32
+    config: configs/fixed_32.yaml
+    requires_dense: false
+  - id: fixed_64
+    config: configs/fixed_64.yaml
+    requires_dense: false
+  - id: fixed_128
+    config: configs/fixed_128.yaml
+    requires_dense: false
+  - id: adaptive_budget
+    config: configs/adaptive_budget.yaml
+    requires_dense: false
+  - id: adaptive_mmr
+    config: configs/adaptive_mmr.yaml
+    requires_dense: false
+  - id: adaptive_fallback
+    config: configs/adaptive_fallback.yaml
+    requires_dense: false
+  - id: adacolrag
+    config: configs/adacolrag.yaml
+    requires_dense: true
+  - id: adacolrag_ocr
+    config: configs/adacolrag_ocr.yaml
+    requires_dense: true
