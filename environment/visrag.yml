@@ -1,0 +1,17 @@
+name: adacolrag-visrag
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10.8
+  - pip
+  - pip:
+      - torch>=2.2,<2.6
+      - torchvision
+      - transformers>=4.40,<4.47
+      - accelerate>=0.30,<2
+      - pillow>=10,<12
+      - tqdm>=4.66,<5
+      - numpy>=1.26,<3
+      - PyYAML>=6,<7
