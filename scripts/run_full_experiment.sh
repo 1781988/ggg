@@ -14,6 +14,8 @@ GPU_DEVICE="${GPU_DEVICE:-cuda:0}"
 COLVISION_BATCH_SIZE="${COLVISION_BATCH_SIZE:-1}"
 VISRAG_BATCH_SIZE="${VISRAG_BATCH_SIZE:-1}"
 DTYPE="${DTYPE:-bfloat16}"
+USE_PROJECT_HF_CACHE="${USE_PROJECT_HF_CACHE:-0}"
+CLEAN_STALE_HF_LOCKS="${CLEAN_STALE_HF_LOCKS:-1}"
 
 export PYTHONUNBUFFERED=1
 export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
@@ -21,6 +23,17 @@ export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-600}"
 export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-60}"
 export HF_HUB_VERBOSITY="${HF_HUB_VERBOSITY:-info}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
+
+if [[ "$USE_PROJECT_HF_CACHE" == "1" ]]; then
+  export HF_HOME="$PROJECT_ROOT/.cache/huggingface"
+  export HF_HUB_CACHE="$HF_HOME/hub"
+  export HF_DATASETS_CACHE="$HF_HOME/datasets"
+else
+  export HF_HOME="${HF_HOME:-$PROJECT_ROOT/.cache/huggingface}"
+  export HF_HUB_CACHE="${HF_HUB_CACHE:-$HF_HOME/hub}"
+  export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-$HF_HOME/datasets}"
+fi
+mkdir -p "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
 
 cd "$PROJECT_ROOT"
 
@@ -32,9 +45,19 @@ RESULT_DIR="results/real/$DATASET_SLUG"
 LOG_DIR="logs/$DATASET_SLUG"
 mkdir -p "$RAW_DATA_DIR" "$DATASET_DIR" "$RESULT_DIR" "$LOG_DIR"
 
-printf '\n[1/6] Prepare ViDoRe dataset\n'
+printf '\n[0/6] Hugging Face cache preflight\n'
 echo "HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}"
+echo "HF_HOME=$HF_HOME"
+echo "HF_HUB_CACHE=$HF_HUB_CACHE"
 echo "HF_HUB_DISABLE_XET=$HF_HUB_DISABLE_XET"
+LOCK_ARGS=(--cache-dir "$HF_HUB_CACHE")
+if [[ "$CLEAN_STALE_HF_LOCKS" == "1" ]]; then
+  LOCK_ARGS+=(--clean-stale)
+fi
+conda run --no-capture-output -n adacolrag-core python -u scripts/check_hf_cache_locks.py \
+  "${LOCK_ARGS[@]}"
+
+printf '\n[1/6] Prepare ViDoRe dataset\n'
 echo "HF_HUB_DOWNLOAD_TIMEOUT=$HF_HUB_DOWNLOAD_TIMEOUT"
 DOWNLOAD_ARGS=(
   --dataset "$DATASET_NAME"
