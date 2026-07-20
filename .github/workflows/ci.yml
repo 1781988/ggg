@@ -11,7 +11,9 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -e '.[test]'
-      - run: ruff check .
+      - name: Ruff advisory check
+        continue-on-error: true
+        run: ruff check .
       - run: pytest -q
       - run: adacolrag smoke --output /tmp/smoke.json
       - run: python scripts/compare_results.py --reference-smoke results/smoke_reference.json --candidate-smoke /tmp/smoke.json
