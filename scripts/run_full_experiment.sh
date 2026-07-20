@@ -24,6 +24,12 @@ export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-60}"
 export HF_HUB_VERBOSITY="${HF_HUB_VERBOSITY:-info}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 
+# The legacy hf_transfer backend is commonly left enabled in shell profiles.
+# It fails when the optional hf_transfer package is absent and is unnecessary
+# for mirror-based downloads. Export scripts clear it again before importing
+# transformers/huggingface_hub.
+unset HF_HUB_ENABLE_HF_TRANSFER || true
+
 if [[ "$USE_PROJECT_HF_CACHE" == "1" ]]; then
   export HF_HOME="$PROJECT_ROOT/.cache/huggingface"
   export HF_HUB_CACHE="$HF_HOME/hub"
@@ -50,6 +56,7 @@ echo "HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}"
 echo "HF_HOME=$HF_HOME"
 echo "HF_HUB_CACHE=$HF_HUB_CACHE"
 echo "HF_HUB_DISABLE_XET=$HF_HUB_DISABLE_XET"
+echo "HF_HUB_ENABLE_HF_TRANSFER=${HF_HUB_ENABLE_HF_TRANSFER:-<unset>}"
 LOCK_ARGS=(--cache-dir "$HF_HUB_CACHE")
 if [[ "$CLEAN_STALE_HF_LOCKS" == "1" ]]; then
   LOCK_ARGS+=(--clean-stale)
