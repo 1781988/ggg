@@ -29,6 +29,7 @@ def _minmax(values: dict[str, float]) -> dict[str, float]:
 class AdaColRAGPipeline:
     def __init__(self, config: dict[str, Any]):
         self.config = config
+        self._document_mean_cache: dict[str, np.ndarray] = {}
         complexity = config["complexity"]
         self.budget_controller = BudgetController(
             min_tokens=int(config["min_tokens"]),
@@ -62,8 +63,10 @@ class AdaColRAGPipeline:
         use_dense = query.dense is not None and all(doc.dense is not None for doc in documents.values())
         if use_dense:
             return {doc_id: float(query.dense @ doc.dense) for doc_id, doc in documents.items()}
+        if len(self._document_mean_cache) != len(documents):
+            self._document_mean_cache = {doc_id: mean_vector(doc.tokens) for doc_id, doc in documents.items()}
         query_mean = mean_vector(query.tokens)
-        return {doc_id: float(query_mean @ mean_vector(doc.tokens)) for doc_id, doc in documents.items()}
+        return {doc_id: float(query_mean @ vector) for doc_id, vector in self._document_mean_cache.items()}
 
     def _select_tokens(self, query: QueryEmbedding, document: DocumentEmbedding, budget: int) -> np.ndarray:
         mode = str(self.config["mode"])
@@ -227,7 +230,27 @@ class AdaColRAGPipeline:
         qrels: dict[str, dict[str, int]],
         metadata: dict[str, Any] | None = None,
     ) -> ExperimentResult:
-        traces = {query_id: self.search(query, documents) for query_id, query in queries.items()}
+        traces: dict[str, QueryTrace] = {}
+        total_queries = len(queries)
+        progress_every = max(int(self.config.get("progress_every", 5)), 1)
+        evaluation_start = time.perf_counter()
+        print(
+            f"[evaluate] mode={self.config['mode']} queries={total_queries} documents={len(documents)} "
+            f"candidate_pool={self.config['candidate_pool']}",
+            flush=True,
+        )
+        for index, (query_id, query) in enumerate(queries.items(), start=1):
+            trace = self.search(query, documents)
+            traces[query_id] = trace
+            if index == 1 or index % progress_every == 0 or index == total_queries:
+                elapsed = time.perf_counter() - evaluation_start
+                rate = index / max(elapsed, 1e-9)
+                remaining = (total_queries - index) / max(rate, 1e-9)
+                print(
+                    f"[evaluate] {index}/{total_queries} elapsed={elapsed:.1f}s eta={remaining:.1f}s "
+                    f"last_query_ms={trace.latency_ms:.1f} budget={trace.budget} fallback={trace.fallback}",
+                    flush=True,
+                )
         rankings = {
             query_id: [ranked.doc_id for ranked in trace.ranked]
             for query_id, trace in traces.items()
