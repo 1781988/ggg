@@ -4,7 +4,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
+
+# Clear the legacy transfer flag before colpali_engine imports Hugging Face Hub.
+os.environ.pop("HF_HUB_ENABLE_HF_TRANSFER", None)
 
 import numpy as np
 import torch
@@ -16,6 +20,10 @@ from adacolrag.io import load_dataset_metadata, l2_normalize
 
 def safe_name(identifier: str) -> str:
     return identifier.replace("/", "__").replace("\\", "__")
+
+
+def completed_file(path: Path) -> bool:
+    return path.exists() and path.stat().st_size > 0
 
 
 def load_model(model_name: str, device: str, dtype: str):
@@ -71,6 +79,7 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--dtype", choices=["float16", "bfloat16", "float32"], default="bfloat16")
     parser.add_argument("--device", default="cuda:0")
+    parser.add_argument("--force", action="store_true", help="Recompute embeddings even when files already exist")
     args = parser.parse_args()
 
     dataset_dir = Path(args.dataset_dir)
@@ -80,11 +89,50 @@ def main() -> None:
     document_dir.mkdir(parents=True, exist_ok=True)
     query_dir.mkdir(parents=True, exist_ok=True)
     corpus, queries, _ = load_dataset_metadata(dataset_dir)
+
+    pending_corpus = [
+        row
+        for row in corpus
+        if args.force or not completed_file(document_dir / f"{safe_name(str(row['doc_id']))}.npz")
+    ]
+    pending_queries = [
+        row
+        for row in queries
+        if args.force or not completed_file(query_dir / f"{safe_name(str(row['query_id']))}.npy")
+    ]
+
+    if not pending_corpus and not pending_queries and completed_file(output_dir / "manifest.json"):
+        print(
+            f"[reuse] ColVision embeddings already complete: {len(corpus)} documents, {len(queries)} queries",
+            flush=True,
+        )
+        return
+
+    print(
+        json.dumps(
+            {
+                "model": args.model,
+                "endpoint": os.environ.get("HF_ENDPOINT", "https://huggingface.co"),
+                "hub_cache": os.environ.get("HF_HUB_CACHE"),
+                "legacy_hf_transfer": os.environ.get("HF_HUB_ENABLE_HF_TRANSFER", "unset"),
+                "documents_total": len(corpus),
+                "documents_pending": len(pending_corpus),
+                "queries_total": len(queries),
+                "queries_pending": len(pending_queries),
+            },
+            indent=2,
+        ),
+        flush=True,
+    )
+
     model, processor = load_model(args.model, args.device, args.dtype)
 
-    for start in tqdm(range(0, len(corpus), args.batch_size), desc="documents"):
-        rows = corpus[start : start + args.batch_size]
-        images = [Image.open(resolve_image(dataset_dir, str(row["image_path"]))).convert("RGB") for row in rows]
+    for start in tqdm(range(0, len(pending_corpus), args.batch_size), desc="documents"):
+        rows = pending_corpus[start : start + args.batch_size]
+        images = []
+        for row in rows:
+            with Image.open(resolve_image(dataset_dir, str(row["image_path"]))) as image:
+                images.append(image.convert("RGB"))
         batch = processor.process_images(images).to(model.device)
         with torch.inference_mode():
             embeddings = model(**batch)
@@ -104,8 +152,8 @@ def main() -> None:
                 positions=positions,
             )
 
-    for start in tqdm(range(0, len(queries), args.batch_size), desc="queries"):
-        rows = queries[start : start + args.batch_size]
+    for start in tqdm(range(0, len(pending_queries), args.batch_size), desc="queries"):
+        rows = pending_queries[start : start + args.batch_size]
         batch = processor.process_queries([str(row["text"]) for row in rows]).to(model.device)
         with torch.inference_mode():
             embeddings = model(**batch)
