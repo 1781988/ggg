@@ -78,32 +78,64 @@ class QueryAwareSelector:
         token_count = document_tokens.shape[0]
         if budget >= token_count:
             return np.arange(token_count, dtype=np.int64)
+
         relevance = (query_tokens @ document_tokens.T).max(axis=0)
+        use_redundancy = self.redundancy_weight > 0.0
+        use_layout = (
+            self.layout_weight > 0.0
+            and positions is not None
+            and positions.shape[0] == token_count
+        )
+
+        # The adaptive-budget ablation has no redundancy or layout term. Its
+        # mathematically equivalent solution is a single relevance Top-K rather
+        # than an expensive iterative MMR loop.
+        if not use_redundancy and not use_layout:
+            return np.argpartition(relevance, -budget)[-budget:].astype(np.int64)
+
         selected: list[int] = [int(np.argmax(relevance))]
         available = np.ones(token_count, dtype=bool)
         available[selected[0]] = False
+
+        max_redundancy: np.ndarray | None = None
+        if use_redundancy:
+            max_redundancy = document_tokens @ document_tokens[selected[0]]
+
         coverage = np.zeros((self.layout_bins, self.layout_bins), dtype=np.int32)
-        if positions is not None and positions.shape[0] == token_count:
+        if use_layout:
+            assert positions is not None
             x, y = np.clip(positions[selected[0]], 0.0, 0.999999)
             coverage[int(y * self.layout_bins), int(x * self.layout_bins)] += 1
+
         while len(selected) < budget:
             candidates = np.flatnonzero(available)
             if candidates.size == 0:
                 break
-            redundancy = (document_tokens[candidates] @ document_tokens[selected].T).max(axis=1)
-            utility = self.relevance_weight * relevance[candidates] - self.redundancy_weight * redundancy
-            if positions is not None and positions.shape[0] == token_count:
+            utility = self.relevance_weight * relevance[candidates]
+            if use_redundancy:
+                assert max_redundancy is not None
+                utility = utility - self.redundancy_weight * max_redundancy[candidates]
+            if use_layout:
+                assert positions is not None
                 candidate_positions = np.clip(positions[candidates], 0.0, 0.999999)
                 bx = (candidate_positions[:, 0] * self.layout_bins).astype(int)
                 by = (candidate_positions[:, 1] * self.layout_bins).astype(int)
                 layout_bonus = 1.0 / (1.0 + coverage[by, bx])
-                utility += self.layout_weight * layout_bonus
+                utility = utility + self.layout_weight * layout_bonus
+
             chosen = int(candidates[int(np.argmax(utility))])
             selected.append(chosen)
             available[chosen] = False
-            if positions is not None and positions.shape[0] == token_count:
+
+            if use_redundancy:
+                assert max_redundancy is not None
+                similarity_to_chosen = document_tokens @ document_tokens[chosen]
+                np.maximum(max_redundancy, similarity_to_chosen, out=max_redundancy)
+            if use_layout:
+                assert positions is not None
                 x, y = np.clip(positions[chosen], 0.0, 0.999999)
                 coverage[int(y * self.layout_bins), int(x * self.layout_bins)] += 1
+
         return np.asarray(selected, dtype=np.int64)
 
 
