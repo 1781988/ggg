@@ -12,6 +12,9 @@ dependencies:
   - pip:
       - transformers>=4.40,<4.47
       - accelerate>=0.30,<2
+      - sentencepiece==0.1.99
+      - timm==0.9.10
+      - decord==0.6.0
       - pillow>=10,<12
       - tqdm>=4.66,<5
       - numpy>=1.26,<3
