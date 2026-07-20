@@ -101,6 +101,8 @@ conda run --no-capture-output -n adacolrag-colpali python -u scripts/export_colv
   2>&1 | tee "$LOG_DIR/02_export_colvision.log"
 
 printf '\n[3/6] Export VisRAG dense embeddings\n'
+conda run --no-capture-output -n adacolrag-visrag python -c \
+  'import sentencepiece, timm, decord; print(f"[visrag-env] sentencepiece={sentencepiece.__version__} timm={timm.__version__} decord={decord.__version__}")'
 conda run --no-capture-output -n adacolrag-visrag python -u scripts/export_visrag.py \
   --dataset-dir "$DATASET_DIR" \
   --output-dir "$DENSE_DIR" \
