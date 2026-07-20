@@ -27,10 +27,35 @@ def _smoke(args: argparse.Namespace) -> int:
 
 
 def _evaluate(args: argparse.Namespace) -> int:
+    print(f"[stage] load config: {args.config}", flush=True)
     config = load_config(args.config)
+    print(
+        json.dumps(
+            {
+                "mode": config["mode"],
+                "candidate_pool": config["candidate_pool"],
+                "top_k": config["top_k"],
+                "fixed_tokens": config.get("fixed_tokens"),
+                "min_tokens": config.get("min_tokens"),
+                "max_tokens": config.get("max_tokens"),
+                "dense_weight": config["fusion"].get("dense_weight", 0.0),
+                "lexical_weight": config["fusion"].get("lexical_weight", 0.0),
+                "fallback": config["fallback"].get("enabled", False),
+            },
+            indent=2,
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    print("[stage] load ColVision embeddings", flush=True)
     documents, queries = load_colvision_embeddings(args.dataset_dir, args.colvision_dir)
+    print(f"[stage] loaded documents={len(documents)} queries={len(queries)}", flush=True)
     if args.dense_dir:
+        print(f"[stage] attach dense embeddings: {args.dense_dir}", flush=True)
         documents, queries = attach_dense_embeddings(documents, queries, args.dense_dir)
+    else:
+        print("[stage] no dense embeddings attached", flush=True)
+    print("[stage] load qrels and compute dataset checksum", flush=True)
     _, _, qrels = load_dataset_metadata(args.dataset_dir)
     checksum = dataset_checksum(
         [
@@ -39,6 +64,7 @@ def _evaluate(args: argparse.Namespace) -> int:
             Path(args.dataset_dir) / "qrels.jsonl",
         ]
     )
+    print("[stage] start retrieval evaluation", flush=True)
     result = AdaColRAGPipeline(config).evaluate(
         documents,
         queries,
@@ -50,6 +76,7 @@ def _evaluate(args: argparse.Namespace) -> int:
             "dense_dir": str(args.dense_dir) if args.dense_dir else None,
         },
     )
+    print(f"[stage] write result: {args.output}", flush=True)
     write_json(args.output, result.to_dict())
     print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
     return 0
