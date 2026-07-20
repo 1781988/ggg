@@ -5,42 +5,63 @@ PROJECT_ROOT="${PROJECT_ROOT:-$HOME/GMY/AdaColRAG}"
 DATASET_NAME="${DATASET_NAME:-vidore/vidore_v3_finance_en}"
 DATASET_SLUG="${DATASET_SLUG:-vidore_v3_finance_en}"
 DATASET_LANGUAGE="${DATASET_LANGUAGE:-english}"
+DATASET_REVISION="${DATASET_REVISION:-main}"
+DATASET_DOWNLOAD_MODE="${DATASET_DOWNLOAD_MODE:-auto}"
 COLVISION_MODEL="${COLVISION_MODEL:-vidore/colpali-v1.3}"
 COLVISION_SLUG="${COLVISION_SLUG:-colpali_v13}"
 VISRAG_MODEL="${VISRAG_MODEL:-openbmb/VisRAG-Ret}"
 GPU_DEVICE="${GPU_DEVICE:-cuda:0}"
-COLVISION_BATCH_SIZE="${COLVISION_BATCH_SIZE:-2}"
-VISRAG_BATCH_SIZE="${VISRAG_BATCH_SIZE:-4}"
+COLVISION_BATCH_SIZE="${COLVISION_BATCH_SIZE:-1}"
+VISRAG_BATCH_SIZE="${VISRAG_BATCH_SIZE:-1}"
 DTYPE="${DTYPE:-bfloat16}"
 
 export PYTHONUNBUFFERED=1
-export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-120}"
-export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-30}"
+export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"
+export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-600}"
+export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-60}"
 export HF_HUB_VERBOSITY="${HF_HUB_VERBOSITY:-info}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
 
 cd "$PROJECT_ROOT"
 
+RAW_DATA_DIR="data/raw/$DATASET_SLUG"
 DATASET_DIR="data/$DATASET_SLUG"
 COLVISION_DIR="artifacts/$DATASET_SLUG/$COLVISION_SLUG"
 DENSE_DIR="artifacts/$DATASET_SLUG/visrag_ret"
 RESULT_DIR="results/real/$DATASET_SLUG"
 LOG_DIR="logs/$DATASET_SLUG"
-mkdir -p "$RESULT_DIR" "$LOG_DIR"
+mkdir -p "$RAW_DATA_DIR" "$DATASET_DIR" "$RESULT_DIR" "$LOG_DIR"
 
-printf '\n[1/6] Download and normalize dataset\n'
-echo "HF_HOME=${HF_HOME:-<default>}"
-echo "HF_HUB_DISABLE_XET=${HF_HUB_DISABLE_XET:-0}"
+printf '\n[1/6] Prepare ViDoRe dataset\n'
+echo "HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}"
+echo "HF_HUB_DISABLE_XET=$HF_HUB_DISABLE_XET"
 echo "HF_HUB_DOWNLOAD_TIMEOUT=$HF_HUB_DOWNLOAD_TIMEOUT"
-conda run --no-capture-output -n adacolrag-core python scripts/download_vidore_v3.py \
-  --dataset "$DATASET_NAME" \
-  --language "$DATASET_LANGUAGE" \
-  --streaming \
-  --output-dir "$DATASET_DIR" \
+DOWNLOAD_ARGS=(
+  --dataset "$DATASET_NAME"
+  --revision "$DATASET_REVISION"
+  --language "$DATASET_LANGUAGE"
+  --raw-dir "$RAW_DATA_DIR"
+  --output-dir "$DATASET_DIR"
+)
+if [[ "$DATASET_DOWNLOAD_MODE" == "convert-only" ]]; then
+  DOWNLOAD_ARGS+=(--convert-only)
+elif [[ "$DATASET_DOWNLOAD_MODE" == "download-only" ]]; then
+  DOWNLOAD_ARGS+=(--download-only)
+elif [[ "$DATASET_DOWNLOAD_MODE" != "auto" ]]; then
+  echo "Unsupported DATASET_DOWNLOAD_MODE=$DATASET_DOWNLOAD_MODE (use auto, download-only, or convert-only)" >&2
+  exit 2
+fi
+conda run --no-capture-output -n adacolrag-core python -u scripts/download_vidore_v3.py \
+  "${DOWNLOAD_ARGS[@]}" \
   2>&1 | tee "$LOG_DIR/01_download_dataset.log"
 
+if [[ "$DATASET_DOWNLOAD_MODE" == "download-only" ]]; then
+  echo "Raw parquet download completed. Re-run with DATASET_DOWNLOAD_MODE=convert-only to continue."
+  exit 0
+fi
+
 printf '\n[2/6] Export ColVision multi-vector embeddings\n'
-conda run --no-capture-output -n adacolrag-colpali python scripts/export_colvision.py \
+conda run --no-capture-output -n adacolrag-colpali python -u scripts/export_colvision.py \
   --dataset-dir "$DATASET_DIR" \
   --output-dir "$COLVISION_DIR" \
   --model "$COLVISION_MODEL" \
@@ -50,7 +71,7 @@ conda run --no-capture-output -n adacolrag-colpali python scripts/export_colvisi
   2>&1 | tee "$LOG_DIR/02_export_colvision.log"
 
 printf '\n[3/6] Export VisRAG dense embeddings\n'
-conda run --no-capture-output -n adacolrag-visrag python scripts/export_visrag.py \
+conda run --no-capture-output -n adacolrag-visrag python -u scripts/export_visrag.py \
   --dataset-dir "$DATASET_DIR" \
   --output-dir "$DENSE_DIR" \
   --model "$VISRAG_MODEL" \
@@ -60,7 +81,7 @@ conda run --no-capture-output -n adacolrag-visrag python scripts/export_visrag.p
   2>&1 | tee "$LOG_DIR/03_export_visrag.log"
 
 printf '\n[4/6] Run all baselines and proposed variants\n'
-conda run --no-capture-output -n adacolrag-core python scripts/run_matrix.py \
+conda run --no-capture-output -n adacolrag-core python -u scripts/run_matrix.py \
   --dataset-dir "$DATASET_DIR" \
   --colvision-dir "$COLVISION_DIR" \
   --dense-dir "$DENSE_DIR" \
@@ -69,7 +90,7 @@ conda run --no-capture-output -n adacolrag-core python scripts/run_matrix.py \
 
 printf '\n[5/6] Check the primary acceptance criteria\n'
 set +e
-conda run --no-capture-output -n adacolrag-core python scripts/compare_results.py \
+conda run --no-capture-output -n adacolrag-core python -u scripts/compare_results.py \
   --baseline "$RESULT_DIR/colpali_full.json" \
   --candidate "$RESULT_DIR/adacolrag.json" \
   --max-ndcg5-drop 0.01 \
