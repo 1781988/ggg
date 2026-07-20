@@ -2,30 +2,40 @@ experiments:
   - id: visrag_dense
     config: configs/visrag_dense.yaml
     requires_dense: true
+    description: "Baseline: VisRAG-Ret dense retrieval only"
   - id: colpali_full
     config: configs/colpali_full.yaml
     requires_dense: false
+    description: "Baseline: full-token ColPali late interaction over the full corpus"
   - id: fixed_32
     config: configs/fixed_32.yaml
     requires_dense: false
+    description: "Ablation: fixed 32 relevance-selected visual tokens"
   - id: fixed_64
     config: configs/fixed_64.yaml
     requires_dense: false
+    description: "Ablation: fixed 64 relevance-selected visual tokens"
   - id: fixed_128
     config: configs/fixed_128.yaml
     requires_dense: false
+    description: "Ablation: fixed 128 relevance-selected visual tokens"
   - id: adaptive_budget
     config: configs/adaptive_budget.yaml
     requires_dense: false
+    description: "Ablation: query-adaptive token budget with relevance-only selection"
   - id: adaptive_mmr
     config: configs/adaptive_mmr.yaml
     requires_dense: false
+    description: "Ablation: adaptive budget plus redundancy/layout-aware token selection"
   - id: adaptive_fallback
     config: configs/adaptive_fallback.yaml
     requires_dense: false
+    description: "Ablation: adaptive MMR selection plus confidence-triggered fallback"
   - id: adacolrag
     config: configs/adacolrag.yaml
     requires_dense: true
+    description: "Proposed method: adaptive selection, fallback, and VisRAG dense fusion"
   - id: adacolrag_ocr
     config: configs/adacolrag_ocr.yaml
     requires_dense: true
+    description: "Extended proposed method: AdaColRAG plus OCR lexical fusion"
