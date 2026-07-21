@@ -21,6 +21,7 @@ jobs:
         run: |
           bash -n scripts/run_full_experiment.sh
           bash -n scripts/run_submission_experiments.sh
+          bash -n scripts/run_all_required_experiments.sh
           bash -n scripts/download_visrag_model_curl.sh
       - name: Validate submission matrix and configs
         run: |
