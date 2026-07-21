@@ -29,7 +29,10 @@ def _minmax(values: dict[str, float]) -> dict[str, float]:
 class AdaColRAGPipeline:
     def __init__(self, config: dict[str, Any]):
         self.config = config
-        self._document_mean_cache: dict[str, np.ndarray] = {}
+        self._cache_doc_ids: tuple[str, ...] = ()
+        self._document_mean_matrix: np.ndarray | None = None
+        self._document_dense_matrix: np.ndarray | None = None
+
         complexity = config["complexity"]
         self.budget_controller = BudgetController(
             min_tokens=int(config["min_tokens"]),
@@ -46,6 +49,7 @@ class AdaColRAGPipeline:
             redundancy_weight=float(selector["redundancy_weight"]),
             layout_weight=float(selector["layout_weight"]),
             layout_bins=int(selector["layout_bins"]),
+            prefilter_factor=float(selector.get("prefilter_factor", 0.0)),
         )
         confidence = config["confidence"]
         self.confidence_estimator = ConfidenceEstimator(
@@ -55,18 +59,35 @@ class AdaColRAGPipeline:
             coverage_similarity=float(confidence["coverage_similarity"]),
         )
 
+    def _prepare_coarse_cache(self, documents: dict[str, DocumentEmbedding]) -> tuple[str, ...]:
+        doc_ids = tuple(documents)
+        if doc_ids != self._cache_doc_ids:
+            self._cache_doc_ids = doc_ids
+            self._document_mean_matrix = None
+            self._document_dense_matrix = None
+        return doc_ids
+
     def _coarse_scores(
         self,
         query: QueryEmbedding,
         documents: dict[str, DocumentEmbedding],
     ) -> dict[str, float]:
+        doc_ids = self._prepare_coarse_cache(documents)
         use_dense = query.dense is not None and all(doc.dense is not None for doc in documents.values())
         if use_dense:
-            return {doc_id: float(query.dense @ doc.dense) for doc_id, doc in documents.items()}
-        if len(self._document_mean_cache) != len(documents):
-            self._document_mean_cache = {doc_id: mean_vector(doc.tokens) for doc_id, doc in documents.items()}
-        query_mean = mean_vector(query.tokens)
-        return {doc_id: float(query_mean @ vector) for doc_id, vector in self._document_mean_cache.items()}
+            if self._document_dense_matrix is None:
+                self._document_dense_matrix = np.stack(
+                    [np.asarray(documents[doc_id].dense, dtype=np.float32) for doc_id in doc_ids]
+                )
+            assert query.dense is not None
+            scores = self._document_dense_matrix @ np.asarray(query.dense, dtype=np.float32)
+        else:
+            if self._document_mean_matrix is None:
+                self._document_mean_matrix = np.stack(
+                    [mean_vector(documents[doc_id].tokens) for doc_id in doc_ids]
+                )
+            scores = self._document_mean_matrix @ mean_vector(query.tokens)
+        return {doc_id: float(score) for doc_id, score in zip(doc_ids, scores, strict=True)}
 
     def _select_tokens(self, query: QueryEmbedding, document: DocumentEmbedding, budget: int) -> np.ndarray:
         mode = str(self.config["mode"])
@@ -88,6 +109,7 @@ class AdaColRAGPipeline:
         candidate_ids = sorted(coarse, key=coarse.get, reverse=True)[:candidate_pool]
         coarse_values = np.asarray([coarse[doc_id] for doc_id in candidate_ids], dtype=np.float32)
         mode = str(self.config["mode"])
+
         if mode == "dense":
             ranked = [
                 RankedDocument(doc_id=doc_id, score=float(coarse[doc_id]), selected_tokens=0)
@@ -106,18 +128,21 @@ class AdaColRAGPipeline:
                 scored_document_operations=0,
                 ranked=ranked,
             )
+
         if mode == "full":
             budget = max(doc.tokens.shape[0] for doc in documents.values())
-        elif mode == "fixed":
+        elif mode in {"fixed", "fixed_mmr"}:
             budget = int(self.config["fixed_tokens"])
         else:
             budget, _ = self.budget_controller.estimate(query.tokens, coarse_values)
+
         visual_scores: dict[str, float] = {}
         selected_counts: dict[str, int] = {}
         selected_tokens_by_doc: dict[str, np.ndarray] = {}
         processed_token_total = 0
         full_token_total = 0
         scored_document_operations = 0
+
         for doc_id in candidate_ids:
             document = documents[doc_id]
             selected_indices = self._select_tokens(query, document, budget)
@@ -128,6 +153,7 @@ class AdaColRAGPipeline:
             full_token_total += int(document.tokens.shape[0])
             scored_document_operations += 1
             visual_scores[doc_id] = late_interaction_score(query.tokens, selected_tokens)
+
         fused_scores = dict(visual_scores)
         fusion = self.config["fusion"]
         dense_weight = float(fusion.get("dense_weight", 0.0))
@@ -136,7 +162,8 @@ class AdaColRAGPipeline:
             dense_normalized = _minmax({doc_id: coarse[doc_id] for doc_id in candidate_ids})
             visual_normalized = _minmax(visual_scores)
             fused_scores = {
-                doc_id: (1.0 - dense_weight) * visual_normalized[doc_id] + dense_weight * dense_normalized[doc_id]
+                doc_id: (1.0 - dense_weight) * visual_normalized[doc_id]
+                + dense_weight * dense_normalized[doc_id]
                 for doc_id in candidate_ids
             }
         if lexical_weight > 0:
@@ -148,6 +175,7 @@ class AdaColRAGPipeline:
                 + lexical_weight * lexical_normalized[doc_id]
                 for doc_id in candidate_ids
             }
+
         ranked_ids = sorted(fused_scores, key=fused_scores.get, reverse=True)
         score_array = np.asarray([fused_scores[doc_id] for doc_id in ranked_ids[:10]], dtype=np.float32)
         top_doc_id = ranked_ids[0]
@@ -159,11 +187,15 @@ class AdaColRAGPipeline:
         fallback_enabled = bool(self.config["fallback"]["enabled"])
         threshold = float(self.config["confidence"]["fallback_threshold"])
         fallback = fallback_enabled and confidence < threshold
+
         if fallback:
             fallback_pool = min(int(self.config["fallback_pool"]), len(documents))
             fallback_ids = sorted(coarse, key=coarse.get, reverse=True)[:fallback_pool]
             use_full = bool(self.config["fallback"].get("use_full_tokens", True))
-            fallback_budget = None if use_full else int(self.config["max_tokens"])
+            configured_fallback_tokens = int(
+                self.config["fallback"].get("tokens", self.config.get("max_tokens", budget))
+            )
+            fallback_budget = None if use_full else configured_fallback_tokens
             for doc_id in fallback_ids:
                 document = documents[doc_id]
                 if fallback_budget is None:
@@ -181,6 +213,7 @@ class AdaColRAGPipeline:
                 full_token_total += int(document.tokens.shape[0])
                 scored_document_operations += 1
                 visual_scores[doc_id] = late_interaction_score(query.tokens, selected)
+
             fused_scores = dict(visual_scores)
             if dense_weight > 0:
                 dense_normalized = _minmax({doc_id: coarse[doc_id] for doc_id in fallback_ids})
@@ -200,6 +233,7 @@ class AdaColRAGPipeline:
                     for doc_id in fallback_ids
                 }
             ranked_ids = sorted(fused_scores, key=fused_scores.get, reverse=True)
+
         top_k = int(self.config["top_k"])
         ranked = [
             RankedDocument(
@@ -251,6 +285,7 @@ class AdaColRAGPipeline:
                     f"last_query_ms={trace.latency_ms:.1f} budget={trace.budget} fallback={trace.fallback}",
                     flush=True,
                 )
+
         rankings = {
             query_id: [ranked.doc_id for ranked in trace.ranked]
             for query_id, trace in traces.items()
@@ -281,7 +316,10 @@ class AdaColRAGPipeline:
             "mean_confidence": float(np.mean(confidences)) if confidences else 0.0,
             "fallback_rate": float(np.mean(fallbacks)) if fallbacks else 0.0,
             "low_confidence_rate": float(
-                np.mean([value < float(self.config["confidence"]["fallback_threshold"]) for value in confidences])
+                np.mean([
+                    value < float(self.config["confidence"]["fallback_threshold"])
+                    for value in confidences
+                ])
             )
             if confidences
             else 0.0,
@@ -299,6 +337,7 @@ class AdaColRAGPipeline:
             }
             for query_id, trace in traces.items()
         }
+        selector = self.config["selector"]
         result_metadata = {
             "config_hash": config_hash(self.config),
             "mode": self.config["mode"],
@@ -307,6 +346,14 @@ class AdaColRAGPipeline:
             "numpy": np.__version__,
             "queries": len(queries),
             "documents": len(documents),
+            "fixed_tokens": self.config.get("fixed_tokens"),
+            "selector_prefilter_factor": selector.get("prefilter_factor", 0.0),
+            "selector_redundancy_weight": selector.get("redundancy_weight", 0.0),
+            "selector_layout_weight": selector.get("layout_weight", 0.0),
+            "dense_weight": self.config["fusion"].get("dense_weight", 0.0),
+            "lexical_weight": self.config["fusion"].get("lexical_weight", 0.0),
+            "fallback_enabled": self.config["fallback"].get("enabled", False),
+            "fallback_threshold": self.config["confidence"].get("fallback_threshold"),
         }
         if metadata:
             result_metadata.update(metadata)
