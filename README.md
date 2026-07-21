@@ -6,7 +6,7 @@ AdaColRAG separates frozen-model embedding export from CPU retrieval experiments
 
 ## Current submission framework
 
-The repository now contains two experiment levels:
+The repository contains two experiment levels:
 
 - `configs/matrix.yaml`: compact development matrix;
 - `configs/submission_matrix.yaml`: 17-system controlled submission matrix.
@@ -21,6 +21,8 @@ The submission workflow addresses the main validity gaps found in the first Fina
 6. hardware, package versions, Git commit, BLAS threads, and repeated timing are recorded;
 7. result integrity is checked before manuscript tables are generated;
 8. `paper/draft.md` is automatically updated from generated Markdown tables.
+
+The complete server procedure is in `docs/SUBMISSION_RUNBOOK.md`; the paper-specific requirements are in `paper/EXPERIMENT_PROTOCOL.md`.
 
 ## Repository layout
 
@@ -60,7 +62,7 @@ conda run -n adacolrag-visrag python -m pip install -e .
 conda run -n adacolrag-core pytest -q
 ```
 
-The primary ColPali checkpoint is now:
+The primary ColPali checkpoint is:
 
 ```text
 vidore/colpali-v1.3-merged
@@ -70,7 +72,7 @@ The merged checkpoint is required for submission runs because it avoids ambiguou
 
 ## One-click submission run
 
-The default workflow is intentionally large. It reruns embeddings, 17 experiments, bootstrap analysis, repeated timing, and four datasets. Reserve substantial disk space and use `tmux`.
+The default workflow reruns embeddings, 17 experiments, bootstrap analysis, repeated timing, and four datasets. Reserve substantial disk space and use `tmux`.
 
 ```bash
 cd ~/GMY/AdaColRAG
@@ -100,7 +102,7 @@ When `VISRAG_LOCAL_MODEL_DIR` is omitted, the model is loaded from `openbmb/VisR
 
 ### Quick Finance EN verification
 
-Use this before committing to the full multi-domain run:
+Use this before the full multi-domain run:
 
 ```bash
 PROJECT_ROOT="$HOME/GMY/AdaColRAG" \
