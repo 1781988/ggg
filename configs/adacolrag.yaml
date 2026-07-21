@@ -2,20 +2,14 @@ seed: 42
 candidate_pool: 50
 fallback_pool: 100
 top_k: 10
-mode: adaptive
-min_tokens: 32
-max_tokens: 128
-budget_multiple: 8
-complexity:
-  query_length_weight: 0.35
-  dispersion_weight: 0.30
-  ambiguity_weight: 0.35
-  length_reference: 24
+mode: fixed_mmr
+fixed_tokens: 112
 selector:
   relevance_weight: 1.0
   redundancy_weight: 0.25
   layout_weight: 0.10
   layout_bins: 4
+  prefilter_factor: 4.0
 confidence:
   margin_weight: 0.40
   entropy_weight: 0.25
@@ -30,5 +24,5 @@ fallback:
   use_full_tokens: true
 acceptance:
   max_ndcg5_drop: 0.01
-  min_token_reduction: 0.50
+  min_token_reduction: 0.45
   min_latency_reduction: 0.30
