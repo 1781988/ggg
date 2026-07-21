@@ -53,26 +53,40 @@ def main() -> None:
     paper_path = Path(args.paper)
     generated_dir = Path(args.generated_dir)
     primary_root = Path(args.submission_root) / args.primary_dataset
+    development_root = primary_root / "development"
     text = paper_path.read_text(encoding="utf-8")
     replacements = {
         "CROSS_DATASET_RESULTS": read_or_placeholder(
             generated_dir / "cross_dataset_results.md",
-            "_Run `scripts/run_submission_experiments.sh` to generate the cross-dataset table._",
+            "_Run `scripts/run_all_required_experiments.sh` to generate the cross-dataset table._",
+        ),
+        "CROSS_DATASET_DELTAS": read_or_placeholder(
+            generated_dir / "cross_dataset_deltas.md",
+            "_Cross-dataset deltas will be inserted after the held-out evaluation._",
         ),
         "PRIMARY_RESULTS": read_or_placeholder(
             primary_root / "analysis" / "results_table.md",
-            "_The primary controlled-matrix table will be inserted after the submission rerun._",
+            "_The Finance EN controlled main matrix will be inserted after rerunning the new framework._",
         ),
         "PRIMARY_SIGNIFICANCE": read_or_placeholder(
             primary_root / "analysis" / "significance_table.md",
-            "_Paired bootstrap intervals will be inserted after the submission rerun._",
+            "_Finance EN paired bootstrap intervals will be inserted after rerunning the new framework._",
+        ),
+        "DEVELOPMENT_RESULTS": read_or_placeholder(
+            development_root / "analysis" / "results_table.md",
+            "_Finance EN development sensitivity results have not been generated yet._",
+        ),
+        "DEVELOPMENT_SIGNIFICANCE": read_or_placeholder(
+            development_root / "analysis" / "significance_table.md",
+            "_Finance EN development paired comparisons have not been generated yet._",
         ),
         "REPEATED_TIMING": timing_table(primary_root / "repeated_timing.json"),
+        "DEVELOPMENT_TIMING": timing_table(development_root / "repeated_timing.json"),
     }
     for name, content in replacements.items():
         text = replace_block(text, name, content)
     paper_path.write_text(text, encoding="utf-8")
-    print(f"Updated {paper_path} from generated submission results")
+    print(f"Updated {paper_path} from generated development and held-out results")
 
 
 if __name__ == "__main__":
