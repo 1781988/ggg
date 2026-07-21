@@ -1,0 +1,16 @@
+seed: 42
+mode: fixed_mmr
+fixed_tokens: 112
+candidate_pool: 50
+top_k: 10
+selector:
+  relevance_weight: 1.0
+  redundancy_weight: 0.25
+  layout_weight: 0.0
+  layout_bins: 4
+  prefilter_factor: 4.0
+fusion:
+  dense_weight: 0.0
+  lexical_weight: 0.0
+fallback:
+  enabled: false
