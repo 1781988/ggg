@@ -13,74 +13,67 @@ experiments:
     config: configs/colpali_mean_top50_full.yaml
     requires_dense: false
     group: candidate_control
-    description: ColPali mean-vector Top-50 candidate generation followed by full-token ColPali
+    description: ColPali mean-vector Top-50 followed by full-token ColPali
   - id: visrag_top50_full
     config: configs/visrag_top50_full.yaml
     requires_dense: true
     group: candidate_control
-    description: VisRAG Top-50 candidate generation followed by full-token ColPali without score fusion
-  - id: fixed_32
-    config: configs/fixed_32.yaml
+    description: VisRAG Top-50 followed by full-token ColPali without fusion
+  - id: colpali_mean_top50_fixed_112
+    config: configs/colpali_mean_top50_fixed_112.yaml
     requires_dense: false
-    group: colpali_mean_token_baseline
-    description: ColPali mean-vector Top-50 with 32 relevance-selected tokens
-  - id: fixed_64
-    config: configs/fixed_64.yaml
-    requires_dense: false
-    group: colpali_mean_token_baseline
-    description: ColPali mean-vector Top-50 with 64 relevance-selected tokens
-  - id: fixed_128
-    config: configs/fixed_128.yaml
-    requires_dense: false
-    group: colpali_mean_token_baseline
-    description: ColPali mean-vector Top-50 with 128 relevance-selected tokens
-  - id: adaptive_budget
-    config: configs/adaptive_budget.yaml
-    requires_dense: false
-    group: colpali_mean_ablation
-    description: ColPali mean-vector Top-50 with adaptive relevance-only token budgets
-  - id: adaptive_mmr
-    config: configs/adaptive_mmr.yaml
-    requires_dense: false
-    group: colpali_mean_ablation
-    description: ColPali mean-vector Top-50 with adaptive relevance-diversity-layout selection
-  - id: adaptive_fallback
-    config: configs/adaptive_fallback.yaml
-    requires_dense: false
-    group: colpali_mean_ablation
-    description: ColPali mean-vector Top-50 adaptive MMR with confidence-triggered recovery
+    group: candidate_control
+    description: ColPali mean-vector Top-50 with 112 relevance-selected tokens
   - id: visrag_top50_fixed_112
     config: configs/visrag_top50_fixed_112.yaml
     requires_dense: true
-    group: matched_candidate_control
-    description: VisRAG Top-50 with a fixed 112-token budget matched to the observed adaptive mean
-  - id: visrag_top50_fixed_128
-    config: configs/visrag_top50_fixed_128.yaml
+    group: token_baseline
+    description: VisRAG Top-50 with 112 relevance-selected tokens
+  - id: visrag_top50_mmr_redundancy
+    config: configs/visrag_top50_mmr_redundancy.yaml
     requires_dense: true
-    group: matched_candidate_control
-    description: VisRAG Top-50 with a fixed 128-token budget
-  - id: visrag_top50_adaptive_budget
-    config: configs/visrag_top50_adaptive_budget.yaml
+    group: selector_ablation
+    description: Fixed-112 fast MMR with redundancy suppression only
+  - id: visrag_top50_mmr_layout
+    config: configs/visrag_top50_mmr_layout.yaml
     requires_dense: true
-    group: matched_candidate_ablation
-    description: VisRAG Top-50 with adaptive relevance-only token budgets
-  - id: visrag_top50_adaptive_mmr
-    config: configs/visrag_top50_adaptive_mmr.yaml
+    group: selector_ablation
+    description: Fixed-112 fast MMR with layout coverage only
+  - id: visrag_top50_mmr
+    config: configs/visrag_top50_mmr.yaml
     requires_dense: true
-    group: matched_candidate_ablation
-    description: VisRAG Top-50 with adaptive relevance-diversity-layout selection
-  - id: visrag_top50_adaptive_fallback
-    config: configs/visrag_top50_adaptive_fallback.yaml
+    group: selector_ablation
+    description: Fixed-112 fast MMR with redundancy and layout coverage
+  - id: visrag_top50_mmr_fallback
+    config: configs/visrag_top50_mmr_fallback.yaml
     requires_dense: true
-    group: matched_candidate_ablation
-    description: VisRAG Top-50 adaptive MMR with confidence-triggered full-token recovery and no dense score fusion
+    group: recovery_ablation
+    description: Fast MMR with confidence-triggered full-token recovery and no dense fusion
+  - id: adacolrag_no_fallback
+    config: configs/adacolrag_no_fallback.yaml
+    requires_dense: true
+    group: fusion_ablation
+    description: Fast MMR with dense score fusion and no fallback
   - id: adacolrag
     config: configs/adacolrag.yaml
     requires_dense: true
     group: proposed
-    description: Complete AdaColRAG with dense candidate generation, adaptive MMR, dense fusion, and fallback
+    description: Fast MMR, dense score fusion, and confidence-aware full-token recovery
   - id: adacolrag_ocr
     config: configs/adacolrag_ocr.yaml
     requires_dense: true
     group: extension
     description: AdaColRAG with additional OCR lexical fusion
+
+comparisons:
+  - colpali_full:adacolrag
+  - visrag_dense:adacolrag
+  - colpali_mean_top50_full:visrag_top50_full
+  - colpali_mean_top50_fixed_112:visrag_top50_fixed_112
+  - visrag_top50_fixed_112:visrag_top50_mmr_redundancy
+  - visrag_top50_fixed_112:visrag_top50_mmr_layout
+  - visrag_top50_fixed_112:visrag_top50_mmr
+  - visrag_top50_mmr:visrag_top50_mmr_fallback
+  - visrag_top50_mmr:adacolrag_no_fallback
+  - adacolrag_no_fallback:adacolrag
+  - adacolrag:adacolrag_ocr
