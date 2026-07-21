@@ -80,8 +80,24 @@ def format_float(value: object, digits: int = 4) -> str:
     return f"{float(value):.{digits}f}"
 
 
+def mark_pareto(rows: list[dict]) -> None:
+    for row in rows:
+        quality = float(row["nDCG@5"])
+        latency = float(row["mean_latency_ms"])
+        row["pareto_quality_latency"] = not any(
+            float(other["nDCG@5"]) >= quality
+            and float(other["mean_latency_ms"]) <= latency
+            and (
+                float(other["nDCG@5"]) > quality
+                or float(other["mean_latency_ms"]) < latency
+            )
+            for other in rows
+            if other is not row
+        )
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Summarize and statistically analyze AdaColRAG submission results")
+    parser = argparse.ArgumentParser(description="Summarize and statistically analyze AdaColRAG results")
     parser.add_argument("--matrix", default="configs/submission_matrix.yaml")
     parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--results-dir", required=True)
@@ -90,25 +106,25 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--comparisons",
-        default=(
-            "colpali_full:adacolrag,visrag_dense:adacolrag,visrag_top50_full:adacolrag,"
-            "visrag_top50_fixed_112:visrag_top50_adaptive_budget,"
-            "visrag_top50_adaptive_budget:visrag_top50_adaptive_mmr,"
-            "visrag_top50_adaptive_mmr:visrag_top50_adaptive_fallback,"
-            "visrag_top50_adaptive_fallback:adacolrag"
-        ),
+        default=None,
+        help="Optional comma-separated baseline:candidate pairs; defaults to matrix comparisons",
     )
     args = parser.parse_args()
 
     with Path(args.matrix).open("r", encoding="utf-8") as handle:
-        experiments = yaml.safe_load(handle)["experiments"]
+        matrix = yaml.safe_load(handle)
+    experiments = matrix["experiments"]
+    if args.comparisons is None:
+        comparison_items = [str(item) for item in matrix.get("comparisons", [])]
+    else:
+        comparison_items = [part.strip() for part in args.comparisons.split(",") if part.strip()]
+
     results_dir = Path(args.results_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     qrels = read_qrels(Path(args.dataset_dir) / "qrels.jsonl")
 
     rows: list[dict] = []
-    payloads: dict[str, dict] = {}
     ndcg_per_query: dict[str, dict[str, float]] = {}
     for experiment in experiments:
         experiment_id = experiment["id"]
@@ -116,7 +132,6 @@ def main() -> None:
         if not path.is_file():
             raise FileNotFoundError(path)
         payload = read_json(path)
-        payloads[experiment_id] = payload
         ndcg_per_query[experiment_id] = per_query_ndcg(payload, qrels, 5)
         metrics = payload["metrics"]
         efficiency = payload["efficiency"]
@@ -150,9 +165,10 @@ def main() -> None:
                 "fallback_rate": reliability["fallback_rate"],
             }
         )
+    mark_pareto(rows)
 
     comparisons: dict[str, dict] = {}
-    for index, item in enumerate(part.strip() for part in args.comparisons.split(",") if part.strip()):
+    for index, item in enumerate(comparison_items):
         baseline_id, candidate_id = item.split(":", 1)
         if baseline_id not in ndcg_per_query or candidate_id not in ndcg_per_query:
             raise KeyError(f"unknown comparison: {item}")
@@ -171,6 +187,7 @@ def main() -> None:
     summary = {
         "dataset_dir": str(Path(args.dataset_dir)),
         "results_dir": str(results_dir),
+        "matrix": str(args.matrix),
         "bootstrap_samples": args.bootstrap_samples,
         "rows": rows,
         "comparisons": comparisons,
@@ -186,12 +203,12 @@ def main() -> None:
         writer.writerows(rows)
 
     table_lines = [
-        "| Method | Group | nDCG@5 | nDCG@10 | R@5 | R@10 | MRR@10 | Tokens/op. | Local red. | System work red. | Mean ms | p95 ms | Fallback |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Method | Group | nDCG@5 | nDCG@10 | R@5 | R@10 | MRR@10 | Tokens/op. | Local red. | System work red. | Mean ms | p95 ms | Fallback | Pareto |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
         table_lines.append(
-            "| {id} | {group} | {n5} | {n10} | {r5} | {r10} | {mrr} | {tokens} | {local} | {system} | {mean} | {p95} | {fallback} |".format(
+            "| {id} | {group} | {n5} | {n10} | {r5} | {r10} | {mrr} | {tokens} | {local} | {system} | {mean} | {p95} | {fallback} | {pareto} |".format(
                 id=row["id"],
                 group=row["group"],
                 n5=format_float(row["nDCG@5"]),
@@ -205,6 +222,7 @@ def main() -> None:
                 mean=format_float(row["mean_latency_ms"], 1),
                 p95=format_float(row["p95_latency_ms"], 1),
                 fallback=f"{100 * float(row['fallback_rate']):.2f}%",
+                pareto="yes" if row["pareto_quality_latency"] else "no",
             )
         )
     (output_dir / "results_table.md").write_text("\n".join(table_lines) + "\n", encoding="utf-8")
