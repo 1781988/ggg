@@ -28,8 +28,26 @@ def normalized_entropy(scores: np.ndarray) -> float:
     return entropy / math.log(scores.size)
 
 
+def topk_indices(values: np.ndarray, k: int) -> np.ndarray:
+    """Return deterministic descending Top-K indices without sorting the full array."""
+
+    if k <= 0:
+        return np.empty(0, dtype=np.int64)
+    if k >= values.size:
+        return np.argsort(values, kind="stable")[::-1].astype(np.int64)
+    partition = np.argpartition(values, values.size - k)[-k:]
+    order = np.argsort(values[partition], kind="stable")[::-1]
+    return partition[order].astype(np.int64)
+
+
 @dataclass(frozen=True)
 class BudgetController:
+    """Legacy adaptive-budget controller retained for archived diagnostics.
+
+    The submission method uses a fixed budget selected on the development corpus.
+    Keeping this class preserves backwards compatibility with archived experiments.
+    """
+
     min_tokens: int
     max_tokens: int
     multiple: int
@@ -67,6 +85,7 @@ class QueryAwareSelector:
     redundancy_weight: float = 0.25
     layout_weight: float = 0.10
     layout_bins: int = 4
+    prefilter_factor: float = 4.0
 
     def select(
         self,
@@ -75,72 +94,92 @@ class QueryAwareSelector:
         budget: int,
         positions: np.ndarray | None = None,
     ) -> np.ndarray:
-        token_count = document_tokens.shape[0]
+        """Select query-relevant, non-redundant and spatially distributed tokens.
+
+        Exact greedy MMR over all 1,024 page tokens is unnecessarily expensive.
+        When ``prefilter_factor`` is positive, relevance Top-(factor x budget)
+        candidates are formed first and MMR is applied only inside that pool. A
+        factor of zero reproduces the exact archived selector.
+        """
+
+        token_count = int(document_tokens.shape[0])
+        budget = min(max(int(budget), 0), token_count)
+        if budget == 0:
+            return np.empty(0, dtype=np.int64)
         if budget >= token_count:
             return np.arange(token_count, dtype=np.int64)
 
         relevance = (query_tokens @ document_tokens.T).max(axis=0)
+        valid_positions = positions is not None and positions.shape[0] == token_count
         use_redundancy = self.redundancy_weight > 0.0
-        use_layout = (
-            self.layout_weight > 0.0
-            and positions is not None
-            and positions.shape[0] == token_count
-        )
+        use_layout = self.layout_weight > 0.0 and valid_positions
 
-        # The adaptive-budget ablation has no redundancy or layout term. Its
-        # mathematically equivalent solution is a single relevance Top-K rather
-        # than an expensive iterative MMR loop.
         if not use_redundancy and not use_layout:
-            return np.argpartition(relevance, -budget)[-budget:].astype(np.int64)
+            return topk_indices(relevance, budget)
 
-        selected: list[int] = [int(np.argmax(relevance))]
-        available = np.ones(token_count, dtype=bool)
-        available[selected[0]] = False
+        pool_size = token_count
+        if self.prefilter_factor > 0.0:
+            pool_size = min(
+                token_count,
+                max(budget, int(math.ceil(float(budget) * self.prefilter_factor))),
+            )
+        pool_indices = (
+            topk_indices(relevance, pool_size)
+            if pool_size < token_count
+            else np.arange(token_count, dtype=np.int64)
+        )
+        pool_tokens = document_tokens[pool_indices]
+        pool_relevance = relevance[pool_indices]
+        pool_positions = positions[pool_indices] if valid_positions else None
+
+        selected_local: list[int] = [int(np.argmax(pool_relevance))]
+        available = np.ones(pool_size, dtype=bool)
+        available[selected_local[0]] = False
 
         max_redundancy: np.ndarray | None = None
         if use_redundancy:
-            max_redundancy = document_tokens @ document_tokens[selected[0]]
+            max_redundancy = pool_tokens @ pool_tokens[selected_local[0]]
 
         coverage = np.zeros((self.layout_bins, self.layout_bins), dtype=np.int32)
         if use_layout:
-            assert positions is not None
-            x, y = np.clip(positions[selected[0]], 0.0, 0.999999)
+            assert pool_positions is not None
+            x, y = np.clip(pool_positions[selected_local[0]], 0.0, 0.999999)
             coverage[int(y * self.layout_bins), int(x * self.layout_bins)] += 1
 
-        while len(selected) < budget:
+        while len(selected_local) < budget:
             candidates = np.flatnonzero(available)
             if candidates.size == 0:
                 break
-            utility = self.relevance_weight * relevance[candidates]
+            utility = self.relevance_weight * pool_relevance[candidates]
             if use_redundancy:
                 assert max_redundancy is not None
                 utility = utility - self.redundancy_weight * max_redundancy[candidates]
             if use_layout:
-                assert positions is not None
-                candidate_positions = np.clip(positions[candidates], 0.0, 0.999999)
+                assert pool_positions is not None
+                candidate_positions = np.clip(pool_positions[candidates], 0.0, 0.999999)
                 bx = (candidate_positions[:, 0] * self.layout_bins).astype(int)
                 by = (candidate_positions[:, 1] * self.layout_bins).astype(int)
                 layout_bonus = 1.0 / (1.0 + coverage[by, bx])
                 utility = utility + self.layout_weight * layout_bonus
 
             chosen = int(candidates[int(np.argmax(utility))])
-            selected.append(chosen)
+            selected_local.append(chosen)
             available[chosen] = False
 
             if use_redundancy:
                 assert max_redundancy is not None
-                similarity_to_chosen = document_tokens @ document_tokens[chosen]
+                similarity_to_chosen = pool_tokens @ pool_tokens[chosen]
                 np.maximum(max_redundancy, similarity_to_chosen, out=max_redundancy)
             if use_layout:
-                assert positions is not None
-                x, y = np.clip(positions[chosen], 0.0, 0.999999)
+                assert pool_positions is not None
+                x, y = np.clip(pool_positions[chosen], 0.0, 0.999999)
                 coverage[int(y * self.layout_bins), int(x * self.layout_bins)] += 1
 
-        return np.asarray(selected, dtype=np.int64)
+        return pool_indices[np.asarray(selected_local, dtype=np.int64)]
 
 
 def fixed_relevance_select(query_tokens: np.ndarray, document_tokens: np.ndarray, budget: int) -> np.ndarray:
     if budget >= document_tokens.shape[0]:
         return np.arange(document_tokens.shape[0], dtype=np.int64)
     relevance = (query_tokens @ document_tokens.T).max(axis=0)
-    return np.argpartition(relevance, -budget)[-budget:]
+    return topk_indices(relevance, budget)
