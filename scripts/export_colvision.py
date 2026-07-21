@@ -26,10 +26,30 @@ def completed_file(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 0
 
 
+def resolve_model_source(model_name: str) -> tuple[str, bool]:
+    candidate = Path(model_name).expanduser()
+    if candidate.is_dir():
+        required = [
+            candidate / "config.json",
+            candidate / "model.safetensors.index.json",
+            candidate / "model-00001-of-00002.safetensors",
+            candidate / "model-00002-of-00002.safetensors",
+            candidate / "tokenizer.json",
+            candidate / "tokenizer_config.json",
+            candidate / "preprocessor_config.json",
+        ]
+        missing = [str(path) for path in required if not completed_file(path)]
+        if missing:
+            raise FileNotFoundError(f"Incomplete local ColVision snapshot; missing files: {missing}")
+        return str(candidate.resolve()), True
+    return model_name, False
+
+
 def load_model(model_name: str, device: str, dtype: str):
     from colpali_engine import models as col_models
 
-    lowered = model_name.lower()
+    model_source, local_only = resolve_model_source(model_name)
+    lowered = model_source.lower()
     if "colqwen2.5" in lowered and hasattr(col_models, "ColQwen2_5"):
         model_cls = col_models.ColQwen2_5
         processor_cls = col_models.ColQwen2_5_Processor
@@ -39,16 +59,36 @@ def load_model(model_name: str, device: str, dtype: str):
     else:
         model_cls = col_models.ColPali
         processor_cls = col_models.ColPaliProcessor
+
     torch_dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16, "float32": torch.float32}[dtype]
-    model = model_cls.from_pretrained(model_name, torch_dtype=torch_dtype, device_map=device).eval()
-    processor = processor_cls.from_pretrained(model_name)
-    return model, processor
+    load_kwargs = {
+        "torch_dtype": torch_dtype,
+        "device_map": device,
+    }
+    processor_kwargs = {}
+    if local_only:
+        # This is the central reliability guarantee for submission runs: once the
+        # snapshot is prepared, Transformers must never fall back to the network.
+        load_kwargs["local_files_only"] = True
+        processor_kwargs["local_files_only"] = True
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+    model = model_cls.from_pretrained(model_source, **load_kwargs).eval()
+    processor = processor_cls.from_pretrained(model_source, **processor_kwargs)
+    return model, processor, model_source, local_only
 
 
-def verify_checkpoint(model, model_name: str) -> dict:
+def verify_checkpoint(model, model_source: str, local_only: bool) -> dict:
     """Record enough state to distinguish a merged checkpoint from a broken adapter load."""
 
-    merged = "merged" in model_name.lower()
+    source_path = Path(model_source)
+    merged = "merged" in model_source.lower()
+    snapshot_info = None
+    if local_only and completed_file(source_path / "snapshot_info.json"):
+        snapshot_info = json.loads((source_path / "snapshot_info.json").read_text(encoding="utf-8"))
+        merged = merged and bool(snapshot_info.get("verified", False))
+
     lora_parameters: list[dict] = []
     for name, parameter in model.named_parameters():
         if "lora_" not in name:
@@ -65,20 +105,23 @@ def verify_checkpoint(model, model_name: str) -> dict:
 
     if merged:
         verified = True
-        reason = "merged checkpoint; LoRA tensors are expected to be folded into base weights"
+        reason = "verified merged checkpoint; LoRA tensors are folded into base weights"
     else:
         lora_b = [item for item in lora_parameters if "lora_B" in item["name"]]
         verified = bool(lora_b) and any(item["nonzero"] > 0 and item["max_abs"] > 0 for item in lora_b)
         reason = (
             "non-zero LoRA-B tensors detected"
             if verified
-            else "adapter checkpoint has no verifiably non-zero LoRA-B tensor"
+            else "checkpoint has neither a verified merged snapshot nor a verifiably non-zero LoRA-B tensor"
         )
 
     return {
         "verified": verified,
         "reason": reason,
         "merged_checkpoint": merged,
+        "local_files_only": local_only,
+        "model_source": model_source,
+        "snapshot_info": snapshot_info,
         "model_class": type(model).__name__,
         "parameter_count": int(sum(parameter.numel() for parameter in model.parameters())),
         "trainable_parameter_count": int(sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)),
@@ -155,10 +198,13 @@ def main() -> None:
         )
         return
 
+    model_source, local_only = resolve_model_source(args.model)
     print(
         json.dumps(
             {
-                "model": args.model,
+                "model_argument": args.model,
+                "model_source": model_source,
+                "local_files_only": local_only,
                 "endpoint": os.environ.get("HF_ENDPOINT", "https://huggingface.co"),
                 "hub_cache": os.environ.get("HF_HUB_CACHE"),
                 "legacy_hf_transfer": os.environ.get("HF_HUB_ENABLE_HF_TRANSFER", "unset"),
@@ -172,13 +218,13 @@ def main() -> None:
         flush=True,
     )
 
-    model, processor = load_model(args.model, args.device, args.dtype)
-    verification = verify_checkpoint(model, args.model)
+    model, processor, model_source, local_only = load_model(args.model, args.device, args.dtype)
+    verification = verify_checkpoint(model, model_source, local_only)
     print("[checkpoint] " + json.dumps(verification, ensure_ascii=False, sort_keys=True), flush=True)
     if not verification["verified"] and not args.allow_unverified_checkpoint:
         raise RuntimeError(
-            "ColVision checkpoint verification failed. Use a merged checkpoint such as "
-            "vidore/colpali-v1.3-merged, or pass --allow-unverified-checkpoint only for diagnostics."
+            "ColVision checkpoint verification failed. Prepare the local merged snapshot with "
+            "scripts/download_colpali_merged_model_curl.sh, or pass --allow-unverified-checkpoint only for diagnostics."
         )
 
     for start in tqdm(range(0, len(pending_corpus), args.batch_size), desc="documents"):
@@ -218,9 +264,10 @@ def main() -> None:
             np.save(query_dir / f"{safe_name(str(row['query_id']))}.npy", tokens.astype(np.float32))
 
     manifest = {
-        "format_version": 2,
+        "format_version": 3,
         "type": "colvision_multi_vector",
         "model": args.model,
+        "model_source": model_source,
         "dtype": args.dtype,
         "documents": len(corpus),
         "queries": len(queries),
