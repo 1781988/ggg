@@ -6,7 +6,12 @@ MATRIX="${MATRIX:-configs/submission_matrix.yaml}"
 SUBMISSION_DATASETS="${SUBMISSION_DATASETS:-vidore/vidore_v3_finance_en|vidore_v3_finance_en|english;vidore/vidore_v3_industrial|vidore_v3_industrial|english;vidore/vidore_v3_pharmaceuticals|vidore_v3_pharmaceuticals|english;vidore/vidore_v3_finance_fr|vidore_v3_finance_fr|french}"
 QUICK_MODE="${QUICK_MODE:-0}"
 DATASET_REVISION="${DATASET_REVISION:-main}"
-COLVISION_MODEL="${COLVISION_MODEL:-vidore/colpali-v1.3-merged}"
+COLVISION_REMOTE_MODEL="${COLVISION_REMOTE_MODEL:-vidore/colpali-v1.3-merged}"
+COLVISION_MODEL_REVISION="${COLVISION_MODEL_REVISION:-5b955e3415a7c5468ab33119d98d6d45c3a5b2c3}"
+COLVISION_LOCAL_MODEL_DIR="${COLVISION_LOCAL_MODEL_DIR:-$PROJECT_ROOT/models/colpali-v1.3-merged}"
+COLVISION_DOWNLOAD_ENDPOINTS="${COLVISION_DOWNLOAD_ENDPOINTS:-https://hf-mirror.com https://huggingface.co}"
+DOWNLOAD_COLVISION_MODEL="${DOWNLOAD_COLVISION_MODEL:-1}"
+COLVISION_MODEL="$COLVISION_LOCAL_MODEL_DIR"
 COLVISION_SLUG="${COLVISION_SLUG:-colpali_v13_merged}"
 COLVISION_BATCH_SIZE="${COLVISION_BATCH_SIZE:-1}"
 VISRAG_MODEL="${VISRAG_MODEL:-openbmb/VisRAG-Ret}"
@@ -78,6 +83,36 @@ conda run --no-capture-output -n adacolrag-visrag python -c 'import torch, trans
 conda run --no-capture-output -n adacolrag-core python -u scripts/check_hf_cache_locks.py \
   --cache-dir "$HF_HUB_CACHE" --clean-stale
 
+printf '\n[model snapshot] Prepare merged ColPali locally; Python model loading will be offline\n'
+if [[ "$DOWNLOAD_COLVISION_MODEL" == "1" ]]; then
+  PROJECT_ROOT="$PROJECT_ROOT" \
+  MODEL_REPO="$COLVISION_REMOTE_MODEL" \
+  MODEL_REVISION="$COLVISION_MODEL_REVISION" \
+  TARGET_DIR="$COLVISION_LOCAL_MODEL_DIR" \
+  HF_HUB_CACHE="$HF_HUB_CACHE" \
+  COLPALI_DOWNLOAD_ENDPOINTS="$COLVISION_DOWNLOAD_ENDPOINTS" \
+  bash scripts/download_colpali_merged_model_curl.sh \
+    2>&1 | tee logs/submission/00_colpali_model.log
+fi
+
+for required_file in \
+  config.json \
+  model.safetensors.index.json \
+  model-00001-of-00002.safetensors \
+  model-00002-of-00002.safetensors \
+  preprocessor_config.json \
+  tokenizer.json \
+  tokenizer_config.json \
+  snapshot_info.json
+do
+  if [[ ! -s "$COLVISION_LOCAL_MODEL_DIR/$required_file" ]]; then
+    echo "Local ColPali snapshot is incomplete: $COLVISION_LOCAL_MODEL_DIR/$required_file" >&2
+    exit 2
+  fi
+done
+COLVISION_MODEL="$COLVISION_LOCAL_MODEL_DIR"
+echo "COLVISION_MODEL=$COLVISION_MODEL"
+
 conda run --no-capture-output -n adacolrag-core python -u scripts/capture_environment.py \
   --output "$META_DIR/environment_core.json"
 conda run --no-capture-output -n adacolrag-colpali python -u scripts/capture_environment.py \
@@ -127,7 +162,7 @@ for DATASET_SPEC in "${DATASET_ITEMS[@]}"; do
     --output-dir "$DATASET_DIR" \
     2>&1 | tee "$LOG_DIR/01_dataset.log"
 
-  printf '\n[2/8] Export verified merged ColPali embeddings\n'
+  printf '\n[2/8] Export verified merged ColPali embeddings from local snapshot\n'
   conda run --no-capture-output -n adacolrag-colpali python -u scripts/export_colvision.py \
     --dataset-dir "$DATASET_DIR" \
     --output-dir "$COLVISION_DIR" \
