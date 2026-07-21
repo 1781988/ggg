@@ -38,6 +38,9 @@ def _evaluate(args: argparse.Namespace) -> int:
                 "fixed_tokens": config.get("fixed_tokens"),
                 "min_tokens": config.get("min_tokens"),
                 "max_tokens": config.get("max_tokens"),
+                "selector_prefilter_factor": config["selector"].get("prefilter_factor", 0.0),
+                "redundancy_weight": config["selector"].get("redundancy_weight", 0.0),
+                "layout_weight": config["selector"].get("layout_weight", 0.0),
                 "dense_weight": config["fusion"].get("dense_weight", 0.0),
                 "lexical_weight": config["fusion"].get("lexical_weight", 0.0),
                 "fallback": config["fallback"].get("enabled", False),
@@ -86,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="adacolrag")
     subparsers = parser.add_subparsers(dest="command", required=True)
     smoke = subparsers.add_parser("smoke", help="Run deterministic synthetic end-to-end evaluation")
-    smoke.add_argument("--config", default="configs/adacolrag.yaml")
+    smoke.add_argument("--config", default="configs/smoke.yaml")
     smoke.add_argument("--output", default="results/smoke_actual.json")
     smoke.set_defaults(func=_smoke)
     evaluate = subparsers.add_parser("evaluate", help="Evaluate exported embeddings")
