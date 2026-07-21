@@ -45,6 +45,48 @@ def load_model(model_name: str, device: str, dtype: str):
     return model, processor
 
 
+def verify_checkpoint(model, model_name: str) -> dict:
+    """Record enough state to distinguish a merged checkpoint from a broken adapter load."""
+
+    merged = "merged" in model_name.lower()
+    lora_parameters: list[dict] = []
+    for name, parameter in model.named_parameters():
+        if "lora_" not in name:
+            continue
+        detached = parameter.detach()
+        lora_parameters.append(
+            {
+                "name": name,
+                "shape": list(detached.shape),
+                "nonzero": int(torch.count_nonzero(detached).item()),
+                "max_abs": float(detached.abs().max().float().cpu()) if detached.numel() else 0.0,
+            }
+        )
+
+    if merged:
+        verified = True
+        reason = "merged checkpoint; LoRA tensors are expected to be folded into base weights"
+    else:
+        lora_b = [item for item in lora_parameters if "lora_B" in item["name"]]
+        verified = bool(lora_b) and any(item["nonzero"] > 0 and item["max_abs"] > 0 for item in lora_b)
+        reason = (
+            "non-zero LoRA-B tensors detected"
+            if verified
+            else "adapter checkpoint has no verifiably non-zero LoRA-B tensor"
+        )
+
+    return {
+        "verified": verified,
+        "reason": reason,
+        "merged_checkpoint": merged,
+        "model_class": type(model).__name__,
+        "parameter_count": int(sum(parameter.numel() for parameter in model.parameters())),
+        "trainable_parameter_count": int(sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)),
+        "lora_parameter_count": len(lora_parameters),
+        "lora_parameters": lora_parameters,
+    }
+
+
 def strip_mask(embedding: torch.Tensor, mask: torch.Tensor | None) -> np.ndarray:
     tensor = embedding.detach().float().cpu()
     if mask is not None:
@@ -75,11 +117,16 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset-dir", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--model", default="vidore/colpali-v1.3")
+    parser.add_argument("--model", default="vidore/colpali-v1.3-merged")
     parser.add_argument("--batch-size", type=int, default=2)
     parser.add_argument("--dtype", choices=["float16", "bfloat16", "float32"], default="bfloat16")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--force", action="store_true", help="Recompute embeddings even when files already exist")
+    parser.add_argument(
+        "--allow-unverified-checkpoint",
+        action="store_true",
+        help="Continue when an unmerged adapter checkpoint cannot be verified. Not recommended for submission runs.",
+    )
     args = parser.parse_args()
 
     dataset_dir = Path(args.dataset_dir)
@@ -126,6 +173,13 @@ def main() -> None:
     )
 
     model, processor = load_model(args.model, args.device, args.dtype)
+    verification = verify_checkpoint(model, args.model)
+    print("[checkpoint] " + json.dumps(verification, ensure_ascii=False, sort_keys=True), flush=True)
+    if not verification["verified"] and not args.allow_unverified_checkpoint:
+        raise RuntimeError(
+            "ColVision checkpoint verification failed. Use a merged checkpoint such as "
+            "vidore/colpali-v1.3-merged, or pass --allow-unverified-checkpoint only for diagnostics."
+        )
 
     for start in tqdm(range(0, len(pending_corpus), args.batch_size), desc="documents"):
         rows = pending_corpus[start : start + args.batch_size]
@@ -164,12 +218,13 @@ def main() -> None:
             np.save(query_dir / f"{safe_name(str(row['query_id']))}.npy", tokens.astype(np.float32))
 
     manifest = {
-        "format_version": 1,
+        "format_version": 2,
         "type": "colvision_multi_vector",
         "model": args.model,
         "dtype": args.dtype,
         "documents": len(corpus),
         "queries": len(queries),
+        "checkpoint_verification": verification,
         "note": "positions are normalized approximate grid coordinates used only for the layout-coverage ablation",
     }
     with (output_dir / "manifest.json").open("w", encoding="utf-8") as handle:
