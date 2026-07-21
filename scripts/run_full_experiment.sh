@@ -7,8 +7,8 @@ DATASET_SLUG="${DATASET_SLUG:-vidore_v3_finance_en}"
 DATASET_LANGUAGE="${DATASET_LANGUAGE:-english}"
 DATASET_REVISION="${DATASET_REVISION:-main}"
 DATASET_DOWNLOAD_MODE="${DATASET_DOWNLOAD_MODE:-auto}"
-COLVISION_MODEL="${COLVISION_MODEL:-vidore/colpali-v1.3}"
-COLVISION_SLUG="${COLVISION_SLUG:-colpali_v13}"
+COLVISION_MODEL="${COLVISION_MODEL:-vidore/colpali-v1.3-merged}"
+COLVISION_SLUG="${COLVISION_SLUG:-colpali_v13_merged}"
 VISRAG_MODEL="${VISRAG_MODEL:-openbmb/VisRAG-Ret}"
 VISRAG_LOCAL_MODEL_DIR="${VISRAG_LOCAL_MODEL_DIR:-}"
 GPU_DEVICE="${GPU_DEVICE:-cuda:0}"
@@ -24,11 +24,6 @@ export HF_HUB_DOWNLOAD_TIMEOUT="${HF_HUB_DOWNLOAD_TIMEOUT:-600}"
 export HF_HUB_ETAG_TIMEOUT="${HF_HUB_ETAG_TIMEOUT:-60}"
 export HF_HUB_VERBOSITY="${HF_HUB_VERBOSITY:-info}"
 export TOKENIZERS_PARALLELISM="${TOKENIZERS_PARALLELISM:-false}"
-
-# The legacy hf_transfer backend is commonly left enabled in shell profiles.
-# It fails when the optional hf_transfer package is absent and is unnecessary
-# for mirror-based downloads. Export scripts clear it again before importing
-# transformers/huggingface_hub.
 unset HF_HUB_ENABLE_HF_TRANSFER || true
 
 if [[ "$USE_PROJECT_HF_CACHE" == "1" ]]; then
@@ -66,7 +61,6 @@ echo "HF_ENDPOINT=${HF_ENDPOINT:-https://huggingface.co}"
 echo "HF_HOME=$HF_HOME"
 echo "HF_HUB_CACHE=$HF_HUB_CACHE"
 echo "HF_HUB_DISABLE_XET=$HF_HUB_DISABLE_XET"
-echo "HF_HUB_ENABLE_HF_TRANSFER=${HF_HUB_ENABLE_HF_TRANSFER:-<unset>}"
 echo "VISRAG_MODEL=$VISRAG_MODEL"
 LOCK_ARGS=(--cache-dir "$HF_HUB_CACHE")
 if [[ "$CLEAN_STALE_HF_LOCKS" == "1" ]]; then
@@ -76,7 +70,6 @@ conda run --no-capture-output -n adacolrag-core python -u scripts/check_hf_cache
   "${LOCK_ARGS[@]}"
 
 printf '\n[1/6] Prepare ViDoRe dataset\n'
-echo "HF_HUB_DOWNLOAD_TIMEOUT=$HF_HUB_DOWNLOAD_TIMEOUT"
 DOWNLOAD_ARGS=(
   --dataset "$DATASET_NAME"
   --revision "$DATASET_REVISION"
@@ -89,19 +82,17 @@ if [[ "$DATASET_DOWNLOAD_MODE" == "convert-only" ]]; then
 elif [[ "$DATASET_DOWNLOAD_MODE" == "download-only" ]]; then
   DOWNLOAD_ARGS+=(--download-only)
 elif [[ "$DATASET_DOWNLOAD_MODE" != "auto" ]]; then
-  echo "Unsupported DATASET_DOWNLOAD_MODE=$DATASET_DOWNLOAD_MODE (use auto, download-only, or convert-only)" >&2
+  echo "Unsupported DATASET_DOWNLOAD_MODE=$DATASET_DOWNLOAD_MODE" >&2
   exit 2
 fi
 conda run --no-capture-output -n adacolrag-core python -u scripts/download_vidore_v3.py \
-  "${DOWNLOAD_ARGS[@]}" \
-  2>&1 | tee "$LOG_DIR/01_download_dataset.log"
+  "${DOWNLOAD_ARGS[@]}" 2>&1 | tee "$LOG_DIR/01_download_dataset.log"
 
 if [[ "$DATASET_DOWNLOAD_MODE" == "download-only" ]]; then
-  echo "Raw parquet download completed. Re-run with DATASET_DOWNLOAD_MODE=convert-only to continue."
   exit 0
 fi
 
-printf '\n[2/6] Export ColVision multi-vector embeddings\n'
+printf '\n[2/6] Export verified ColVision multi-vector embeddings\n'
 conda run --no-capture-output -n adacolrag-colpali python -u scripts/export_colvision.py \
   --dataset-dir "$DATASET_DIR" \
   --output-dir "$COLVISION_DIR" \
@@ -123,15 +114,16 @@ conda run --no-capture-output -n adacolrag-visrag python -u scripts/export_visra
   --device "$GPU_DEVICE" \
   2>&1 | tee "$LOG_DIR/03_export_visrag.log"
 
-printf '\n[4/6] Run all baselines and proposed variants\n'
+printf '\n[4/6] Run development matrix\n'
 conda run --no-capture-output -n adacolrag-core python -u scripts/run_matrix.py \
+  --matrix configs/matrix.yaml \
   --dataset-dir "$DATASET_DIR" \
   --colvision-dir "$COLVISION_DIR" \
   --dense-dir "$DENSE_DIR" \
   --output-dir "$RESULT_DIR" \
   2>&1 | tee "$LOG_DIR/04_run_matrix.log"
 
-printf '\n[5/6] Check the primary acceptance criteria\n'
+printf '\n[5/6] Report the original engineering thresholds\n'
 set +e
 conda run --no-capture-output -n adacolrag-core python -u scripts/compare_results.py \
   --baseline "$RESULT_DIR/colpali_full.json" \
@@ -147,8 +139,8 @@ printf '\n[6/6] Result inventory\n'
 find "$RESULT_DIR" -maxdepth 1 -type f -name '*.json' -printf '%f\n' | sort
 
 if [[ "$COMPARE_STATUS" -ne 0 ]]; then
-  echo "The experiment completed, but AdaColRAG did not pass every configured acceptance threshold."
+  echo "The experiment completed, but one or more engineering thresholds were not met."
   exit "$COMPARE_STATUS"
 fi
 
-echo "The experiment completed and passed all configured acceptance thresholds."
+echo "The experiment completed and passed all configured engineering thresholds."
