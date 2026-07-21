@@ -1,0 +1,31 @@
+seed: 42
+candidate_pool: 50
+fallback_pool: 100
+top_k: 10
+mode: adaptive
+min_tokens: 32
+max_tokens: 128
+budget_multiple: 8
+complexity:
+  query_length_weight: 0.35
+  dispersion_weight: 0.30
+  ambiguity_weight: 0.35
+  length_reference: 24
+selector:
+  relevance_weight: 1.0
+  redundancy_weight: 0.25
+  layout_weight: 0.10
+  layout_bins: 4
+  prefilter_factor: 0.0
+confidence:
+  margin_weight: 0.40
+  entropy_weight: 0.25
+  coverage_weight: 0.35
+  coverage_similarity: 0.25
+  fallback_threshold: 0.48
+fusion:
+  dense_weight: 0.15
+  lexical_weight: 0.0
+fallback:
+  enabled: true
+  use_full_tokens: true
