@@ -15,5 +15,41 @@ jobs:
         continue-on-error: true
         run: ruff check .
       - run: pytest -q
+      - name: Compile Python entry points
+        run: python -m compileall -q src scripts tests
+      - name: Validate shell entry points
+        run: |
+          bash -n scripts/run_full_experiment.sh
+          bash -n scripts/run_submission_experiments.sh
+          bash -n scripts/download_visrag_model_curl.sh
+      - name: Validate submission matrix and configs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+          from adacolrag.config import load_config
+
+          matrix = yaml.safe_load(Path('configs/submission_matrix.yaml').read_text())['experiments']
+          ids = [item['id'] for item in matrix]
+          assert len(ids) == 17, ids
+          assert len(ids) == len(set(ids)), ids
+          for item in matrix:
+              path = Path(item['config'])
+              assert path.is_file(), path
+              config = load_config(path)
+              assert config['candidate_pool'] > 0
+              assert config['top_k'] > 0
+          required = {
+              'colpali_full',
+              'colpali_mean_top50_full',
+              'visrag_top50_full',
+              'visrag_top50_fixed_112',
+              'visrag_top50_adaptive_budget',
+              'visrag_top50_adaptive_mmr',
+              'visrag_top50_adaptive_fallback',
+              'adacolrag',
+          }
+          assert required.issubset(ids)
+          PY
       - run: adacolrag smoke --output /tmp/smoke.json
       - run: python scripts/compare_results.py --reference-smoke results/smoke_reference.json --candidate-smoke /tmp/smoke.json
