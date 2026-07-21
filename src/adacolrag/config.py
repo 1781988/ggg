@@ -13,8 +13,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "candidate_pool": 50,
     "fallback_pool": 100,
     "top_k": 10,
-    "mode": "adaptive",
-    "fixed_tokens": 64,
+    "mode": "fixed_mmr",
+    "fixed_tokens": 112,
     "min_tokens": 32,
     "max_tokens": 128,
     "budget_multiple": 8,
@@ -29,6 +29,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "redundancy_weight": 0.25,
         "layout_weight": 0.10,
         "layout_bins": 4,
+        "prefilter_factor": 4.0,
     },
     "confidence": {
         "margin_weight": 0.40,
@@ -47,7 +48,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "acceptance": {
         "max_ndcg5_drop": 0.01,
-        "min_token_reduction": 0.50,
+        "min_token_reduction": 0.45,
         "min_latency_reduction": 0.30,
     },
 }
