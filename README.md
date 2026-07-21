@@ -1,56 +1,79 @@
 # AdaColRAG
 
-**Query-adaptive visual-token selection with confidence-aware recovery for efficient visual document retrieval.**
+**Fast query-aware visual-token selection with confidence-aware recovery for efficient visual document retrieval.**
 
-AdaColRAG separates frozen-model embedding export from CPU retrieval experiments. ColPali supplies page/query multi-vectors, VisRAG-Ret supplies dense candidate vectors, and the core framework evaluates candidate generation, token budgeting, relevance--diversity--coverage selection, score fusion, and confidence-triggered full-token recovery.
+AdaColRAG combines frozen VisRAG dense candidate generation with selected-token ColPali late interaction. The primary method uses a fixed development-selected token budget, relevance-prefiltered MMR, dense/late-interaction fusion, and confidence-triggered full-token recovery.
 
-## Current submission framework
+The earlier query-complexity budget controller is retained only for archived reproducibility. Verified Finance EN experiments found no significant advantage over a matched fixed budget, so adaptive budgeting is not part of the final method or main matrix.
 
-The repository contains two experiment levels:
+## Final experiment structure
 
-- `configs/matrix.yaml`: compact development matrix;
-- `configs/submission_matrix.yaml`: 17-system controlled submission matrix.
+The repository contains two distinct matrices:
 
-The submission workflow addresses the main validity gaps found in the first Finance EN pilot:
+- `configs/development_matrix.yaml`: 13 Finance EN sensitivity experiments;
+- `configs/submission_matrix.yaml`: 13 controlled main systems for four datasets.
 
-1. it defaults to the official merged checkpoint `vidore/colpali-v1.3-merged`;
-2. ColPali export records and enforces checkpoint verification;
-3. identical VisRAG Top-50 candidate controls isolate candidate pruning, fixed budgets, adaptive budgets, MMR, fallback, and fusion;
-4. four ViDoRe V3 datasets are run by default: Finance EN, Industrial, Pharmaceuticals, and Finance FR;
-5. query-level paired bootstrap intervals are generated;
-6. hardware, package versions, Git commit, BLAS threads, and repeated timing are recorded;
-7. result integrity is checked before manuscript tables are generated;
-8. `paper/draft.md` is automatically updated from generated Markdown tables.
+Finance EN is the development collection. Industrial, Pharmaceuticals, and Finance FR are held-out evaluations.
 
-The complete server procedure is in `docs/SUBMISSION_RUNBOOK.md`; the paper-specific requirements are in `paper/EXPERIMENT_PROTOCOL.md`.
+### Effective modules under test
+
+1. VisRAG Top-50 candidate generation;
+2. fixed 112-token relevance baseline;
+3. fast MMR redundancy suppression;
+4. approximate layout coverage;
+5. dense/late-interaction score fusion;
+6. confidence-triggered Top-100 full-token recovery;
+7. optional OCR lexical fusion.
+
+### Controlled main systems
+
+```text
+visrag_dense
+colpali_full
+colpali_mean_top50_full
+visrag_top50_full
+colpali_mean_top50_fixed_112
+visrag_top50_fixed_112
+visrag_top50_mmr_redundancy
+visrag_top50_mmr_layout
+visrag_top50_mmr
+visrag_top50_mmr_fallback
+adacolrag_no_fallback
+adacolrag
+adacolrag_ocr
+```
+
+All selector ablations use identical VisRAG Top-50 candidates and a fixed 112-token budget.
 
 ## Repository layout
 
 ```text
-configs/submission_matrix.yaml          17 controlled systems
-configs/visrag_top50_*.yaml             identical-candidate controls
-environment/                            isolated core/ColPali/VisRAG environments
-scripts/export_colvision.py             verified merged-checkpoint multi-vector export
-scripts/export_visrag.py                dense VisRAG export
-scripts/run_matrix.py                    progress-aware matrix runner
-scripts/validate_submission_results.py  result/checkpoint integrity checks
-scripts/analyze_submission_results.py   tables and paired bootstrap analysis
-scripts/repeat_benchmarks.py             repeated retrieval timing
-scripts/capture_environment.py           hardware/software metadata
-scripts/aggregate_submission_results.py cross-dataset aggregation
-scripts/update_paper_results.py          inject generated tables into the paper
-scripts/run_submission_experiments.sh    full multi-domain workflow
-scripts/run_all_required_experiments.sh  one-click workflow plus paper update
-paper/draft.md                           WSDM-oriented manuscript source
-paper/generated/                         generated cross-domain tables
+configs/development_matrix.yaml         Finance EN calibration matrix
+configs/submission_matrix.yaml          13-system held-out main matrix
+configs/adacolrag.yaml                  primary fixed-budget fast-MMR method
+environment/                             isolated core/ColPali/VisRAG environments
+scripts/download_submission_dataset.py deterministic pinned dataset downloader
+scripts/export_colvision.py             verified merged ColPali export
+scripts/export_visrag.py                VisRAG dense export
+scripts/run_matrix.py                   progress-aware matrix runner
+scripts/validate_submission_results.py integrity and provenance checks
+scripts/analyze_submission_results.py  tables, Pareto flags, paired bootstrap
+scripts/repeat_benchmarks.py            repeated retrieval-stage timing
+scripts/aggregate_submission_results.py cross-dataset tables and deltas
+scripts/update_paper_results.py         inject generated tables into paper
+scripts/run_submission_experiments.sh   complete experiment workflow
+scripts/run_all_required_experiments.sh one-click workflow plus paper update
+paper/EXPERIMENT_PROTOCOL.md            scientific experiment protocol
+paper/draft.md                          WSDM-oriented manuscript source
+docs/SUBMISSION_RUNBOOK.md              server commands and output paths
 src/adacolrag/                           retrieval framework
 ```
 
 ## Installation
 
-From `~/GMY/AdaColRAG`:
-
 ```bash
+cd ~/GMY/AdaColRAG
+
 conda env update -f environment/core.yml --prune
 conda env update -f environment/colpali.yml --prune
 conda env update -f environment/visrag.yml --prune
@@ -62,24 +85,22 @@ conda run -n adacolrag-visrag python -m pip install -e .
 conda run -n adacolrag-core pytest -q
 ```
 
-The primary ColPali checkpoint is:
+Submission runs require:
 
 ```text
-vidore/colpali-v1.3-merged
+models/colpali-v1.3-merged/   verified local merged checkpoint
+models/VisRAG-Ret/            complete local VisRAG snapshot
 ```
 
-The merged checkpoint is required for submission runs because it avoids ambiguous LoRA key remapping. Unmerged adapter checkpoints are rejected unless `--allow-unverified-checkpoint` is passed explicitly for diagnostics.
+## One-click four-dataset run
 
-## One-click submission run
-
-The default workflow reruns embeddings, 17 experiments, bootstrap analysis, repeated timing, and four datasets. Reserve substantial disk space and use `tmux`.
+Use `tmux` and reuse existing verified Finance EN embeddings:
 
 ```bash
 cd ~/GMY/AdaColRAG
-chmod +x scripts/run_submission_experiments.sh
-chmod +x scripts/run_all_required_experiments.sh
+chmod +x scripts/run_submission_experiments.sh scripts/run_all_required_experiments.sh
 
-tmux new -s adacolrag-submission
+tmux new -s adacolrag-final
 
 export HF_ENDPOINT="https://hf-mirror.com"
 export HF_HOME="/home/user/models/.hf_cache"
@@ -88,145 +109,76 @@ export HF_DATASETS_CACHE="$HF_HOME/datasets"
 export CUDA_VISIBLE_DEVICES=0
 
 PROJECT_ROOT="$HOME/GMY/AdaColRAG" \
+DOWNLOAD_COLVISION_MODEL=0 \
+COLVISION_LOCAL_MODEL_DIR="$HOME/GMY/AdaColRAG/models/colpali-v1.3-merged" \
 VISRAG_LOCAL_MODEL_DIR="$HOME/GMY/AdaColRAG/models/VisRAG-Ret" \
 COLVISION_BATCH_SIZE=1 \
 VISRAG_BATCH_SIZE=1 \
+REBUILD_EMBEDDINGS=0 \
+FRESH_RESULTS=1 \
+RUN_DEVELOPMENT=1 \
+RUN_TIMING=1 \
 TIMING_REPEATS=3 \
 TIMING_WARMUPS=1 \
-REBUILD_EMBEDDINGS=1 \
-FRESH_RESULTS=1 \
+BOOTSTRAP_SAMPLES=10000 \
+MIN_FREE_GB=80 \
 bash scripts/run_all_required_experiments.sh
 ```
 
-When `VISRAG_LOCAL_MODEL_DIR` is omitted, the model is loaded from `openbmb/VisRAG-Ret` through the configured Hugging Face endpoint/cache.
+The script performs:
 
-### Quick Finance EN verification
+1. repository/environment/model preflight;
+2. pinned dataset download and conversion;
+3. embedding reuse or export;
+4. Finance EN development sensitivity;
+5. 13-system main matrix on all four datasets;
+6. result/checkpoint validation;
+7. paired query-level bootstrap analysis;
+8. repeated timing;
+9. cross-dataset aggregation;
+10. automatic `paper/draft.md` table update.
 
-Use this before the full multi-domain run:
+## Finance EN-only framework check
 
 ```bash
 PROJECT_ROOT="$HOME/GMY/AdaColRAG" \
 QUICK_MODE=1 \
+DOWNLOAD_COLVISION_MODEL=0 \
+COLVISION_LOCAL_MODEL_DIR="$HOME/GMY/AdaColRAG/models/colpali-v1.3-merged" \
 VISRAG_LOCAL_MODEL_DIR="$HOME/GMY/AdaColRAG/models/VisRAG-Ret" \
-COLVISION_BATCH_SIZE=1 \
-VISRAG_BATCH_SIZE=1 \
-REBUILD_EMBEDDINGS=1 \
+REBUILD_EMBEDDINGS=0 \
 FRESH_RESULTS=1 \
+TIMING_REPEATS=3 \
+TIMING_WARMUPS=1 \
+BOOTSTRAP_SAMPLES=10000 \
 bash scripts/run_all_required_experiments.sh
 ```
 
-`QUICK_MODE=1` runs only Finance EN and one measured timing pass. It still runs the full 17-system controlled matrix and all integrity/statistical analysis.
-
-## Default dataset specification
-
-The full script uses a semicolon-separated environment variable:
-
-```text
-vidore/vidore_v3_finance_en|vidore_v3_finance_en|english;
-vidore/vidore_v3_industrial|vidore_v3_industrial|english;
-vidore/vidore_v3_pharmaceuticals|vidore_v3_pharmaceuticals|english;
-vidore/vidore_v3_finance_fr|vidore_v3_finance_fr|french
-```
-
-Override it with `SUBMISSION_DATASETS` to add or remove datasets.
-
-## Submission matrix
-
-The 17 systems are grouped as follows.
-
-### External and exhaustive baselines
-
-- `visrag_dense`
-- `colpali_full`
-
-### Candidate-generation controls
-
-- `colpali_mean_top50_full`
-- `visrag_top50_full`
-
-### ColPali-mean candidate token baselines
-
-- `fixed_32`
-- `fixed_64`
-- `fixed_128`
-- `adaptive_budget`
-- `adaptive_mmr`
-- `adaptive_fallback`
-
-### Identical VisRAG Top-50 candidate controls
-
-- `visrag_top50_fixed_112`
-- `visrag_top50_fixed_128`
-- `visrag_top50_adaptive_budget`
-- `visrag_top50_adaptive_mmr`
-- `visrag_top50_adaptive_fallback`
-
-### Complete systems
-
-- `adacolrag`
-- `adacolrag_ocr`
-
-The identical-candidate chain is the principal ablation evidence. It avoids attributing a VisRAG candidate-recall gain to token selection.
+This runs both Finance EN matrices. It is a framework validation and development analysis, not the final cross-domain evaluation.
 
 ## Outputs
 
-For each dataset:
-
-```text
-results/submission/<dataset>/
-├── runs/                       17 query-level result JSON files
-├── analysis/
-│   ├── summary.json
-│   ├── summary.csv
-│   ├── results_table.md
-│   └── significance_table.md
-├── validation.json
-└── repeated_timing.json
-```
-
-Global metadata and paper outputs:
-
 ```text
 results/submission/_meta/
+results/submission/vidore_v3_finance_en/development/
+results/submission/<dataset>/runs/
+results/submission/<dataset>/analysis/
+results/submission/<dataset>/validation.json
+results/submission/<dataset>/repeated_timing.json
+logs/submission/<dataset>/
 paper/generated/cross_dataset_results.md
+paper/generated/cross_dataset_deltas.md
 paper/generated/cross_dataset_results.csv
 paper/generated/cross_dataset_results.json
 paper/draft.md
 ```
 
-## Integrity policy
+Each result JSON preserves query-level rankings, selected-token budgets, confidence, fallback decisions, latency, token work, and scoring-operation counts.
 
-`validate_submission_results.py` fails when:
+## Integrity and interpretation policy
 
-- a matrix result or query trace is missing;
-- dataset checksums differ across systems;
-- ColPali and VisRAG document/query counts differ;
-- a ColPali-only experiment accidentally contains dense embeddings;
-- the ColPali checkpoint is not verified and merged;
-- metric or efficiency values are non-finite.
+The validator fails if results are missing, dataset checksums differ, embedding counts disagree, dense signals leak into non-dense controls, checkpoint provenance is unverified, or metrics are non-finite.
 
-The workflow does not enforce the old 50% local-token engineering target. It reports local token reduction, candidate-operation reduction, full-corpus visual-token work reduction, effectiveness, confidence, and latency separately.
+The workflow reports local token reduction and full-corpus system work separately. System work reduction is not index-storage reduction. The old 50% local-token target is not a publication gate. Claims must jointly consider effectiveness, uncertainty, token work, repeated latency, and controlled attribution.
 
-## Timing boundary
-
-The core timing covers retrieval over preloaded embeddings:
-
-- candidate scoring;
-- token selection;
-- ColPali late interaction;
-- fusion;
-- fallback;
-- sorting.
-
-It excludes model encoding, disk loading, network transfer, indexing, and downstream generation. Repeated timings are therefore retrieval-stage implementation comparisons, not end-to-end serving measurements.
-
-## Paper workflow
-
-`paper/draft.md` contains four generated table blocks. After all experiments finish, `scripts/update_paper_results.py` inserts:
-
-- the full Finance EN controlled matrix;
-- cross-domain primary results;
-- paired bootstrap intervals;
-- repeated timing statistics.
-
-Figure placeholders remain textual and should be converted to publication graphics after the rerun.
+Full operating instructions are in `docs/SUBMISSION_RUNBOOK.md`; paper requirements are in `paper/EXPERIMENT_PROTOCOL.md`.
