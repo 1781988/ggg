@@ -26,12 +26,15 @@ fi
 
 bash scripts/run_submission_experiments.sh
 
-printf '\n[paper] Inject generated tables into paper/draft.md\n'
+printf '\n[paper] Inject development, held-out, significance, and timing tables into paper/draft.md\n'
 conda run --no-capture-output -n adacolrag-core python -u scripts/update_paper_results.py \
   --paper paper/draft.md \
   --generated-dir paper/generated \
   --submission-root results/submission \
   --primary-dataset "$PRIMARY_DATASET"
 
-printf '\nAll required experiments, validation, analysis, timing, aggregation, and paper-table updates completed.\n'
+printf '\nAll required development and held-out experiments completed.\n'
 printf 'Manuscript: %s/paper/draft.md\n' "$PROJECT_ROOT"
+printf 'Finance development bundle: %s/results/submission/%s/development/\n' "$PROJECT_ROOT" "$PRIMARY_DATASET"
+printf 'Per-dataset main bundles: %s/results/submission/<dataset>/\n' "$PROJECT_ROOT"
+printf 'Cross-dataset tables: %s/paper/generated/\n' "$PROJECT_ROOT"
