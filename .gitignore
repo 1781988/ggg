@@ -8,7 +8,9 @@ artifacts/
 data/
 models/
 results/real/
+results/submission/
 results/smoke_actual.json
+paper/generated/
 *.egg-info/
 dist/
 build/
