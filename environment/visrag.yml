@@ -21,3 +21,4 @@ dependencies:
       - PyYAML>=6,<7
       - huggingface_hub>=0.30,<2
       - hf_xet>=1,<2
+      - socksio>=1.0.0,<2
