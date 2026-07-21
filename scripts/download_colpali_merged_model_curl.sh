@@ -38,9 +38,12 @@ large_files=(
   model-00002-of-00002.safetensors
 )
 
+# These are the actual serialized safetensors file sizes, including file headers.
+# model.safetensors.index.json metadata.total_size is tensor payload size and must
+# not be used as an individual shard file-size check.
 declare -A expected_size=(
   [model-00001-of-00002.safetensors]=4986817288
-  [model-00002-of-00002.safetensors]=862409688
+  [model-00002-of-00002.safetensors]=862495528
 )
 
 declare -A expected_sha=(
@@ -150,35 +153,55 @@ download_small() {
   mv "$part" "$target"
 }
 
+verify_sha() {
+  local file="$1"
+  local path="$2"
+  local sha="${expected_sha[$file]}"
+  echo "$sha  $path" | sha256sum --check --status
+}
+
 download_large() {
   local file="$1"
   local target="$TARGET_DIR/$file"
   local part="$target.part"
   local size="${expected_size[$file]}"
-  local sha="${expected_sha[$file]}"
 
   seed_from_hf_cache "$file"
 
-  if [[ -s "$target" ]] && [[ "$(stat -c %s "$target")" == "$size" ]]; then
-    echo "[reuse] $file has the expected size"
-  else
-    if [[ -e "$target" ]]; then
-      mv "$target" "$target.invalid.$(date +%s)"
-    fi
-    download_with_fallback "$file" "$part"
-    actual_size=$(stat -c %s "$part")
+  if [[ -s "$target" ]] && verify_sha "$file" "$target"; then
+    local actual_size
+    actual_size=$(stat -c %s "$target")
     if [[ "$actual_size" != "$size" ]]; then
-      echo "Unexpected size for $file: $actual_size != $size" >&2
-      exit 3
+      echo "[warning] $file has verified SHA256 but size $actual_size differs from expected $size" >&2
     fi
-    mv "$part" "$target"
+    echo "[reuse] $file passed SHA256 verification"
+    return
   fi
 
-  echo "$sha  $target" | sha256sum --check --status || {
+  if [[ -e "$target" ]]; then
+    mv "$target" "$target.invalid.$(date +%s)"
+  fi
+
+  if [[ -s "$part" ]] && verify_sha "$file" "$part"; then
+    echo "[recover] existing .part file already has the official SHA256"
+  else
+    download_with_fallback "$file" "$part"
+  fi
+
+  local actual_size
+  actual_size=$(stat -c %s "$part")
+  if [[ "$actual_size" != "$size" ]]; then
+    echo "[warning] downloaded size for $file is $actual_size; expected serialized size is $size" >&2
+  fi
+
+  if ! verify_sha "$file" "$part"; then
     echo "SHA256 verification failed for $file" >&2
+    echo "The file is retained at $part for diagnosis or resumable retry." >&2
     exit 4
-  }
-  echo "[verified] $file"
+  fi
+
+  mv "$part" "$target"
+  echo "[verified] $file size=$(stat -c %s "$target")"
 }
 
 printf 'Preparing local snapshot %s at %s\n' "$MODEL_REPO" "$TARGET_DIR"
@@ -224,7 +247,8 @@ metadata = {
     "revision": revision,
     "model_dir": str(root.resolve()),
     "architectures": config.get("architectures"),
-    "total_weight_bytes": index.get("metadata", {}).get("total_size"),
+    "tensor_payload_bytes": index.get("metadata", {}).get("total_size"),
+    "serialized_shard_bytes": sum((root / shard).stat().st_size for shard in shards),
     "shards": shards,
     "verified": True,
 }
