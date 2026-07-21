@@ -23,34 +23,76 @@ jobs:
           bash -n scripts/run_submission_experiments.sh
           bash -n scripts/run_all_required_experiments.sh
           bash -n scripts/download_visrag_model_curl.sh
-      - name: Validate submission matrix and configs
+          bash -n scripts/download_colpali_merged_model_curl.sh
+      - name: Validate development and submission matrices
         run: |
           python - <<'PY'
           from pathlib import Path
           import yaml
           from adacolrag.config import load_config
 
-          matrix = yaml.safe_load(Path('configs/submission_matrix.yaml').read_text())['experiments']
-          ids = [item['id'] for item in matrix]
-          assert len(ids) == 17, ids
-          assert len(ids) == len(set(ids)), ids
-          for item in matrix:
-              path = Path(item['config'])
-              assert path.is_file(), path
-              config = load_config(path)
-              assert config['candidate_pool'] > 0
-              assert config['top_k'] > 0
-          required = {
+          expected = {
+              'configs/development_matrix.yaml': 13,
+              'configs/submission_matrix.yaml': 13,
+          }
+          all_ids = {}
+          for matrix_path, expected_count in expected.items():
+              matrix = yaml.safe_load(Path(matrix_path).read_text(encoding='utf-8'))
+              experiments = matrix['experiments']
+              ids = [item['id'] for item in experiments]
+              assert len(ids) == expected_count, (matrix_path, ids)
+              assert len(ids) == len(set(ids)), (matrix_path, ids)
+              all_ids[matrix_path] = set(ids)
+              for item in experiments:
+                  path = Path(item['config'])
+                  assert path.is_file(), path
+                  config = load_config(path)
+                  assert config['candidate_pool'] > 0
+                  assert config['top_k'] > 0
+                  assert config['selector']['prefilter_factor'] >= 0
+              for comparison in matrix.get('comparisons', []):
+                  baseline, candidate = comparison.split(':', 1)
+                  assert baseline in ids, comparison
+                  assert candidate in ids, comparison
+
+          main_required = {
+              'visrag_dense',
               'colpali_full',
               'colpali_mean_top50_full',
               'visrag_top50_full',
               'visrag_top50_fixed_112',
-              'visrag_top50_adaptive_budget',
-              'visrag_top50_adaptive_mmr',
-              'visrag_top50_adaptive_fallback',
+              'visrag_top50_mmr_redundancy',
+              'visrag_top50_mmr_layout',
+              'visrag_top50_mmr',
+              'visrag_top50_mmr_fallback',
+              'adacolrag_no_fallback',
               'adacolrag',
           }
-          assert required.issubset(ids)
+          assert main_required.issubset(all_ids['configs/submission_matrix.yaml'])
+
+          primary = load_config('configs/adacolrag.yaml')
+          assert primary['mode'] == 'fixed_mmr'
+          assert primary['fixed_tokens'] == 112
+          assert primary['selector']['prefilter_factor'] == 4.0
+          PY
+      - name: Validate manuscript generated-table markers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('paper/draft.md').read_text(encoding='utf-8')
+          markers = [
+              'CROSS_DATASET_RESULTS',
+              'CROSS_DATASET_DELTAS',
+              'PRIMARY_RESULTS',
+              'PRIMARY_SIGNIFICANCE',
+              'DEVELOPMENT_RESULTS',
+              'DEVELOPMENT_SIGNIFICANCE',
+              'REPEATED_TIMING',
+              'DEVELOPMENT_TIMING',
+          ]
+          for marker in markers:
+              assert text.count(f'<!-- BEGIN AUTO:{marker} -->') == 1, marker
+              assert text.count(f'<!-- END AUTO:{marker} -->') == 1, marker
           PY
       - run: adacolrag smoke --output /tmp/smoke.json
       - run: python scripts/compare_results.py --reference-smoke results/smoke_reference.json --candidate-smoke /tmp/smoke.json
