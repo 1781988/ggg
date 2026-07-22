@@ -22,9 +22,11 @@ jobs:
           bash -n scripts/run_full_experiment.sh
           bash -n scripts/run_submission_experiments.sh
           bash -n scripts/run_all_required_experiments.sh
+          bash -n scripts/run_final_targeted_experiments.sh
+          bash -n scripts/package_final_experiment_review.sh
           bash -n scripts/download_visrag_model_curl.sh
           bash -n scripts/download_colpali_merged_model_curl.sh
-      - name: Validate development and submission matrices
+      - name: Validate experiment matrices and configs
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -34,6 +36,7 @@ jobs:
           expected = {
               'configs/development_matrix.yaml': 13,
               'configs/submission_matrix.yaml': 13,
+              'configs/final_targeted_matrix.yaml': 4,
           }
           all_ids = {}
           for matrix_path, expected_count in expected.items():
@@ -70,6 +73,20 @@ jobs:
           }
           assert main_required.issubset(all_ids['configs/submission_matrix.yaml'])
 
+          final_ids = all_ids['configs/final_targeted_matrix.yaml']
+          assert final_ids == {
+              'final_redundancy_dense025_no_fallback',
+              'final_redundancy_dense025_fallback',
+              'final_mmr_dense025_no_fallback',
+              'final_mmr_dense025_fallback',
+          }
+          for experiment_id in final_ids:
+              config = load_config(f'configs/{experiment_id}.yaml')
+              assert config['mode'] == 'fixed_mmr'
+              assert config['fixed_tokens'] == 112
+              assert config['selector']['prefilter_factor'] == 4.0
+              assert abs(config['fusion']['dense_weight'] - 0.25) < 1e-12
+
           primary = load_config('configs/adacolrag.yaml')
           assert primary['mode'] == 'fixed_mmr'
           assert primary['fixed_tokens'] == 112
@@ -93,6 +110,8 @@ jobs:
           for marker in markers:
               assert text.count(f'<!-- BEGIN AUTO:{marker} -->') == 1, marker
               assert text.count(f'<!-- END AUTO:{marker} -->') == 1, marker
+          assert '<<<<<<<' not in text
+          assert '>>>>>>>' not in text
           PY
       - run: adacolrag smoke --output /tmp/smoke.json
       - run: python scripts/compare_results.py --reference-smoke results/smoke_reference.json --candidate-smoke /tmp/smoke.json
