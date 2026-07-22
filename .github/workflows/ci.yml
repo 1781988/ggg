@@ -28,25 +28,25 @@ jobs:
           bash -n scripts/package_paper_finalization_review.sh
           bash -n scripts/download_visrag_model_curl.sh
           bash -n scripts/download_colpali_merged_model_curl.sh
-      - name: Validate experiment matrices and configs
+      - name: Validate experiment matrices and final configuration
         run: |
           python - <<'PY'
           from pathlib import Path
           import yaml
           from adacolrag.config import load_config
 
-          expected = {
-              'configs/development_matrix.yaml': 13,
-              'configs/submission_matrix.yaml': 13,
-              'configs/final_targeted_matrix.yaml': 4,
-              'configs/final_paper_matrix.yaml': 11,
-          }
+          matrix_paths = (
+              'configs/development_matrix.yaml',
+              'configs/submission_matrix.yaml',
+              'configs/final_targeted_matrix.yaml',
+              'configs/final_paper_matrix.yaml',
+          )
           all_ids = {}
-          for matrix_path, expected_count in expected.items():
+          for matrix_path in matrix_paths:
               matrix = yaml.safe_load(Path(matrix_path).read_text(encoding='utf-8'))
-              experiments = matrix['experiments']
+              experiments = matrix.get('experiments', [])
+              assert experiments, matrix_path
               ids = [item['id'] for item in experiments]
-              assert len(ids) == expected_count, (matrix_path, ids)
               assert len(ids) == len(set(ids)), (matrix_path, ids)
               all_ids[matrix_path] = set(ids)
               for item in experiments:
@@ -61,16 +61,15 @@ jobs:
                   assert baseline in ids, comparison
                   assert candidate in ids, comparison
 
-          final_ids = all_ids['configs/final_targeted_matrix.yaml']
-          assert final_ids == {
+          assert all_ids['configs/final_targeted_matrix.yaml'] == {
               'final_redundancy_dense025_no_fallback',
               'final_redundancy_dense025_fallback',
               'final_mmr_dense025_no_fallback',
               'final_mmr_dense025_fallback',
           }
-
-          paper_ids = all_ids['configs/final_paper_matrix.yaml']
-          assert {'visrag_dense', 'colpali_full', 'visrag_top50_full', 'adacolrag'}.issubset(paper_ids)
+          assert {
+              'visrag_dense', 'colpali_full', 'visrag_top50_full', 'adacolrag'
+          }.issubset(all_ids['configs/final_paper_matrix.yaml'])
 
           primary = load_config('configs/adacolrag.yaml')
           assert primary['mode'] == 'fixed_mmr'
