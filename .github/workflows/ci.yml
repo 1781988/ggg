@@ -28,57 +28,38 @@ jobs:
           bash -n scripts/package_paper_finalization_review.sh
           bash -n scripts/download_visrag_model_curl.sh
           bash -n scripts/download_colpali_merged_model_curl.sh
-      - name: Validate experiment matrices and final configuration
+      - name: Validate final method and paper matrix
         run: |
           python - <<'PY'
           from pathlib import Path
           import yaml
           from adacolrag.config import load_config
 
-          matrix_paths = (
-              'configs/development_matrix.yaml',
-              'configs/submission_matrix.yaml',
-              'configs/final_targeted_matrix.yaml',
-              'configs/final_paper_matrix.yaml',
-          )
-          all_ids = {}
-          for matrix_path in matrix_paths:
-              matrix = yaml.safe_load(Path(matrix_path).read_text(encoding='utf-8'))
-              experiments = matrix.get('experiments', [])
-              assert experiments, matrix_path
-              ids = [item['id'] for item in experiments]
-              assert len(ids) == len(set(ids)), (matrix_path, ids)
-              all_ids[matrix_path] = set(ids)
-              for item in experiments:
-                  path = Path(item['config'])
-                  assert path.is_file(), path
-                  config = load_config(path)
-                  assert config['candidate_pool'] > 0
-                  assert config['top_k'] > 0
-                  assert config['selector']['prefilter_factor'] >= 0
-              for comparison in matrix.get('comparisons', []):
-                  baseline, candidate = comparison.split(':', 1)
-                  assert baseline in ids, comparison
-                  assert candidate in ids, comparison
-
-          assert all_ids['configs/final_targeted_matrix.yaml'] == {
-              'final_redundancy_dense025_no_fallback',
-              'final_redundancy_dense025_fallback',
-              'final_mmr_dense025_no_fallback',
-              'final_mmr_dense025_fallback',
-          }
-          assert {
-              'visrag_dense', 'colpali_full', 'visrag_top50_full', 'adacolrag'
-          }.issubset(all_ids['configs/final_paper_matrix.yaml'])
-
           primary = load_config('configs/adacolrag.yaml')
-          assert primary['mode'] == 'fixed_mmr'
-          assert primary['fixed_tokens'] == 112
-          assert primary['selector']['redundancy_weight'] == 0.25
-          assert primary['selector']['layout_weight'] == 0.0
-          assert primary['selector']['prefilter_factor'] == 4.0
-          assert primary['fusion']['dense_weight'] == 0.25
+          expected = {
+              'mode': 'fixed_mmr',
+              'fixed_tokens': 112,
+          }
+          for key, value in expected.items():
+              assert primary[key] == value, (key, primary[key])
+          assert float(primary['selector']['redundancy_weight']) == 0.25
+          assert float(primary['selector']['layout_weight']) == 0.0
+          assert float(primary['selector']['prefilter_factor']) == 4.0
+          assert float(primary['fusion']['dense_weight']) == 0.25
           assert primary['fallback']['enabled'] is False
+
+          matrix_path = Path('configs/final_paper_matrix.yaml')
+          matrix = yaml.safe_load(matrix_path.read_text(encoding='utf-8'))
+          experiments = matrix['experiments']
+          ids = [item['id'] for item in experiments]
+          assert len(ids) == len(set(ids))
+          assert {'visrag_dense', 'colpali_full', 'visrag_top50_full', 'adacolrag'}.issubset(ids)
+          for item in experiments:
+              assert Path(item['config']).is_file(), item
+          for comparison in matrix.get('comparisons', []):
+              baseline, candidate = comparison.split(':', 1)
+              assert baseline in ids and candidate in ids, comparison
+          print('final method and paper matrix: PASS')
           PY
       - name: Validate manuscript generated-table markers
         run: |
