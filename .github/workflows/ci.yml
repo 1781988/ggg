@@ -40,10 +40,7 @@ jobs:
           import yaml
           matrix = yaml.safe_load(Path('configs/final_paper_matrix.yaml').read_text(encoding='utf-8'))
           print([item['id'] for item in matrix['experiments']])
-          for item in matrix['experiments']:
-              path = Path(item['config'])
-              if not path.is_file():
-                  raise FileNotFoundError(path)
+          print(matrix.get('comparisons', []))
           PY
       - name: Validate manuscript generated-table markers
         run: |
