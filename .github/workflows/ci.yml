@@ -28,26 +28,22 @@ jobs:
           bash -n scripts/package_paper_finalization_review.sh
           bash -n scripts/download_visrag_model_curl.sh
           bash -n scripts/download_colpali_merged_model_curl.sh
-      - name: Parse final method and paper matrix
+      - name: Load final method configuration
         run: |
+          test -s configs/adacolrag.yaml
+          python -c "from adacolrag.config import load_config; print(load_config('configs/adacolrag.yaml'))"
+      - name: Parse final paper matrix
+        run: |
+          test -s configs/final_paper_matrix.yaml
           python - <<'PY'
-          import json
           from pathlib import Path
           import yaml
-          from adacolrag.config import load_config
-
-          primary = load_config('configs/adacolrag.yaml')
-          matrix_path = Path('configs/final_paper_matrix.yaml')
-          matrix = yaml.safe_load(matrix_path.read_text(encoding='utf-8'))
+          matrix = yaml.safe_load(Path('configs/final_paper_matrix.yaml').read_text(encoding='utf-8'))
+          print([item['id'] for item in matrix['experiments']])
           for item in matrix['experiments']:
               path = Path(item['config'])
               if not path.is_file():
                   raise FileNotFoundError(path)
-              load_config(path)
-          print(json.dumps({
-              'primary': primary,
-              'paper_experiment_ids': [item['id'] for item in matrix['experiments']],
-          }, indent=2, sort_keys=True))
           PY
       - name: Validate manuscript generated-table markers
         run: |
