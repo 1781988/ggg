@@ -1,146 +1,105 @@
-# AdaColRAG Final Experiment Protocol
+# AdaColRAG Final Paper Protocol
 
-This protocol separates **development calibration**, **held-out evaluation**, and the final targeted method-selection stage. Adaptive budgeting is excluded from the primary method because it did not significantly outperform a matched fixed budget on verified Finance EN results.
+This protocol defines the evidence that may populate the final manuscript. It supersedes the earlier adaptive-budget and confidence-recovery framing.
 
-## 1. Frozen model provenance
+## 1. Frozen final method
 
-- Fine retriever: verified local snapshot of `vidore/colpali-v1.3-merged`.
-- Dense retriever: `openbmb/VisRAG-Ret` or a byte-identical verified local snapshot.
-- ColPali manifest must contain:
-  - `checkpoint_verification.verified = true`;
-  - `checkpoint_verification.merged_checkpoint = true`;
-  - `checkpoint_verification.local_files_only = true`.
-- Unmerged or unverified checkpoints are diagnostic only and must not populate paper tables.
+The primary configuration is `configs/adacolrag.yaml`:
 
-## 2. Dataset roles
+- VisRAG Top-50 dense candidate generation;
+- fixed 112-token budget per candidate;
+- relevance prefilter factor 4, yielding at most 448 MMR candidates;
+- redundancy weight 0.25;
+- layout weight 0.0;
+- dense fusion weight 0.25;
+- no OCR fusion;
+- no confidence-triggered fallback.
+
+Adaptive budgeting, approximate layout coverage, fallback, and OCR remain available only for archived or negative ablations.
+
+## 2. Model provenance
+
+- ColPali: verified local snapshot of `vidore/colpali-v1.3-merged`.
+- VisRAG: `openbmb/VisRAG-Ret` or a byte-identical local snapshot.
+- ColPali manifests must report `verified=true`, `merged_checkpoint=true`, and `local_files_only=true`.
+- All compared runs for a dataset must have the same dataset checksum and query count.
+
+## 3. Dataset roles
 
 | Dataset | Language | Role |
 |---|---|---|
-| ViDoRe V3 Finance EN | English | development sensitivity plus main-matrix continuity |
-| ViDoRe V3 Industrial | English | held-out domain transfer |
-| ViDoRe V3 Pharmaceuticals | English | held-out scientific/table transfer |
-| ViDoRe V3 Finance FR | French | held-out multilingual transfer |
+| Finance EN | English | development sensitivity and continuity |
+| Industrial | English | held-out domain transfer |
+| Pharmaceuticals | English | held-out scientific/table transfer |
+| Finance FR | French | held-out multilingual transfer |
 
-The workflow pins dataset revisions and known parquet shard inventories. Only Finance EN may influence hyperparameters.
+Only Finance EN may influence the token budget, MMR prefilter factor, or fusion weight.
 
-## 3. Evidence-supported method components
+## 4. Final evidence sources
 
-The full completed matrix supports the following components:
+The final manuscript combines already validated result bundles:
 
-- VisRAG Top-50 candidate generation;
-- fixed 112-token online scoring budget;
-- relevance prefilter of four times the final budget;
-- redundancy-aware fast MMR with weight `0.25`;
-- dense/late-interaction score fusion;
-- optional confidence-triggered Top-100 full-token recovery.
+- `results/submission/<dataset>/runs/`: external baselines and controlled ablations;
+- `results/final_targeted/<dataset>/runs/`: four final-method candidates;
+- `results/paper_final/<dataset>/significance/`: final method versus primary baselines;
+- `results/paper_final/<dataset>/steady_state_timing.json`: single-process timing;
+- `paper/generated/final_*.md`: automatically generated manuscript tables.
 
-The following components are not primary claims:
+The final result source is:
 
-- adaptive budgeting: negative result and archived reproducibility only;
-- approximate layout coverage: no stable quality gain and substantial latency cost;
-- OCR fusion: optional extension only;
-- fallback: reliability operating mode unless final targeted results justify making it the default.
-
-## 4. Finance EN development matrix
-
-`configs/development_matrix.yaml` evaluates:
-
-- fixed budgets: 64, 96, 112, 128;
-- MMR prefilter factors: 2, 4, exact all-token MMR;
-- recovery thresholds: 0.44, 0.48, 0.52;
-- dense fusion weights: 0.05, 0.15, 0.25.
-
-The verified development results select fixed 112 tokens and prefilter factor 4. Dense weight `0.25` outperformed `0.15` on Finance EN and therefore requires held-out confirmation before the final manuscript is frozen.
-
-## 5. Main 13-system matrix
-
-The source of truth is `configs/submission_matrix.yaml`.
-
-1. `visrag_dense`: dense-only full-corpus baseline.
-2. `colpali_full`: exhaustive full-token ColPali.
-3. `colpali_mean_top50_full`: mean-vector candidate control with full tokens.
-4. `visrag_top50_full`: VisRAG candidate control with full tokens.
-5. `colpali_mean_top50_fixed_112`: candidate-source control at fixed token work.
-6. `visrag_top50_fixed_112`: relevance-only matched token baseline.
-7. `visrag_top50_mmr_redundancy`: redundancy-only selector.
-8. `visrag_top50_mmr_layout`: layout-only selector.
-9. `visrag_top50_mmr`: combined fast selector.
-10. `visrag_top50_mmr_fallback`: selector plus recovery without dense fusion.
-11. `adacolrag_no_fallback`: selector plus dense fusion without recovery.
-12. `adacolrag`: complete method.
-13. `adacolrag_ocr`: optional OCR extension.
-
-All selector comparisons use identical VisRAG Top-50 candidates and a fixed 112-token budget.
-
-## 6. Final targeted method-selection matrix
-
-The source of truth is `configs/final_targeted_matrix.yaml`. It contains four candidates, evaluated on all four datasets using the already exported embeddings:
-
-1. redundancy-only MMR, dense weight `0.25`, no fallback;
-2. redundancy-only MMR, dense weight `0.25`, fallback;
-3. redundancy plus layout MMR, dense weight `0.25`, no fallback;
-4. redundancy plus layout MMR, dense weight `0.25`, fallback.
-
-This stage answers the two remaining method-selection questions:
-
-- whether layout should be deleted from the final system;
-- whether fallback should be the default or an optional reliability mode.
-
-Every pair is analyzed with 10,000 paired query-level bootstrap resamples. Each candidate also receives one warm-up and seven measured timing runs under fixed thread and CPU-affinity settings.
-
-## 7. Final selection rule
-
-The default method should be the simplest candidate satisfying all of the following:
-
-- highest or statistically indistinguishable macro nDCG@5;
-- no systematic held-out degradation;
-- materially lower latency when quality is statistically tied;
-- higher local token reduction when fallback quality gains are not significant;
-- evidence-supported components only.
-
-Fallback may remain an optional reliability mode when its quality gain is concentrated in one domain and its computation cost is substantial.
-
-## 8. Required outputs
-
-For each dataset and experiment stage:
-
-- nDCG@5/10, Recall@1/5/10, MRR@10;
-- local token reduction;
-- visual tokens and page-scoring operations per query;
-- system work reduction versus exhaustive full-token ColPali;
-- mean/P50/P95 retrieval-stage latency;
-- fallback rate and query-level confidence traces;
-- paired bootstrap intervals and two-sided bootstrap probability;
-- repeated timing with warm-up;
-- result and checkpoint validation;
-- hardware, package, thread, cache, dataset revision, and Git metadata.
-
-## 9. Execution
-
-Completed main workflow:
-
-```bash
-bash scripts/run_all_required_experiments.sh
+```text
+final_redundancy_dense025_no_fallback
 ```
 
-Final targeted workflow:
+It is exposed as `adacolrag` through `configs/adacolrag.yaml` and `configs/final_paper_matrix.yaml`.
+
+## 5. Required primary comparisons
+
+The final method must be compared with:
+
+1. `visrag_dense`;
+2. `colpali_full`;
+3. `visrag_top50_full`;
+4. `visrag_top50_fixed_112`;
+5. `visrag_top50_mmr_redundancy`;
+6. the archived α=0.15 no-fallback system;
+7. the archived complete α=0.15 system.
+
+Each comparison uses paired query-level nDCG@5 and nDCG@10 with 10,000 bootstrap samples.
+
+## 6. Timing protocol
+
+Absolute timing must use `scripts/steady_state_benchmarks.py` rather than the archived subprocess-based timing script.
+
+- Load ColPali and VisRAG embeddings once per dataset.
+- Run at least one full warm-up evaluation in the same process.
+- Run at least seven measured evaluations in the same process.
+- Fix CPU affinity and BLAS thread counts.
+- Report median run mean, run-level IQR, pooled query median, pooled query P95, and coefficient of variation.
+- Exclude image/query encoding, disk loading, network transfer, and downstream generation.
+
+The deterministic efficiency claims remain:
+
+- 112 selected tokens per scored page;
+- 50 scored pages per query;
+- 5,600 visual tokens per query;
+- 89.06% local token reduction;
+- approximately 99.81% full-corpus visual-token work reduction.
+
+## 7. Interpretation rules
+
+- Do not claim index-storage reduction.
+- Do not claim universal superiority over VisRAG when a paired interval crosses zero.
+- Treat layout coverage, fallback, OCR, and adaptive budgeting as negative or optional ablations.
+- Use Industrial, Pharmaceuticals, and Finance FR for held-out generalization claims.
+- Keep measured latency separate from analytical token-work reduction.
+
+## 8. One-click finalization
+
+After the validated main and targeted experiments exist locally:
 
 ```bash
-bash scripts/run_final_targeted_experiments.sh
+bash scripts/run_paper_finalization.sh
 ```
 
-Final review bundle:
-
-```bash
-bash scripts/package_final_experiment_review.sh
-```
-
-## 10. Interpretation rules
-
-- Adaptive budgeting is a reported negative result, not a contribution.
-- Approximate layout coverage is removed unless final targeted results show a reproducible gain.
-- The 50% local-token target is not a publication gate; the exact achieved value must be reported.
-- System work reduction must not be described as index-storage reduction.
-- AdaColRAG must not be described as universally superior to VisRAG unless held-out significance supports that statement.
-- Primary cross-domain claims use frozen configurations on Industrial, Pharmaceuticals, and Finance FR.
-- Numerical claims in the final manuscript must be generated from validated result bundles, not copied from archived pilot runs.
+This command performs only statistical postprocessing and single-process timing. It does not download data, run model encoding, or rerun the full effectiveness matrix.
