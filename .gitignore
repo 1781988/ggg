@@ -9,8 +9,11 @@ data/
 models/
 results/real/
 results/submission/
+results/final_targeted/
+results/paper_final/
 results/smoke_actual.json
 paper/generated/
+logs/
 *.egg-info/
 dist/
 build/
