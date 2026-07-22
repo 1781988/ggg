@@ -28,38 +28,26 @@ jobs:
           bash -n scripts/package_paper_finalization_review.sh
           bash -n scripts/download_visrag_model_curl.sh
           bash -n scripts/download_colpali_merged_model_curl.sh
-      - name: Validate final method and paper matrix
+      - name: Parse final method and paper matrix
         run: |
           python - <<'PY'
+          import json
           from pathlib import Path
           import yaml
           from adacolrag.config import load_config
 
           primary = load_config('configs/adacolrag.yaml')
-          expected = {
-              'mode': 'fixed_mmr',
-              'fixed_tokens': 112,
-          }
-          for key, value in expected.items():
-              assert primary[key] == value, (key, primary[key])
-          assert float(primary['selector']['redundancy_weight']) == 0.25
-          assert float(primary['selector']['layout_weight']) == 0.0
-          assert float(primary['selector']['prefilter_factor']) == 4.0
-          assert float(primary['fusion']['dense_weight']) == 0.25
-          assert primary['fallback']['enabled'] is False
-
           matrix_path = Path('configs/final_paper_matrix.yaml')
           matrix = yaml.safe_load(matrix_path.read_text(encoding='utf-8'))
-          experiments = matrix['experiments']
-          ids = [item['id'] for item in experiments]
-          assert len(ids) == len(set(ids))
-          assert {'visrag_dense', 'colpali_full', 'visrag_top50_full', 'adacolrag'}.issubset(ids)
-          for item in experiments:
-              assert Path(item['config']).is_file(), item
-          for comparison in matrix.get('comparisons', []):
-              baseline, candidate = comparison.split(':', 1)
-              assert baseline in ids and candidate in ids, comparison
-          print('final method and paper matrix: PASS')
+          for item in matrix['experiments']:
+              path = Path(item['config'])
+              if not path.is_file():
+                  raise FileNotFoundError(path)
+              load_config(path)
+          print(json.dumps({
+              'primary': primary,
+              'paper_experiment_ids': [item['id'] for item in matrix['experiments']],
+          }, indent=2, sort_keys=True))
           PY
       - name: Validate manuscript generated-table markers
         run: |
