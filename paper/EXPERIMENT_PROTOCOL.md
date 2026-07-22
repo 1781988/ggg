@@ -1,6 +1,6 @@
 # AdaColRAG Final Experiment Protocol
 
-This protocol separates **development calibration** from **held-out evaluation** and removes adaptive budgeting from the primary method because it did not significantly outperform a matched fixed budget on verified Finance EN results.
+This protocol separates **development calibration**, **held-out evaluation**, and the final targeted method-selection stage. Adaptive budgeting is excluded from the primary method because it did not significantly outperform a matched fixed budget on verified Finance EN results.
 
 ## 1. Frozen model provenance
 
@@ -23,20 +23,23 @@ This protocol separates **development calibration** from **held-out evaluation**
 
 The workflow pins dataset revisions and known parquet shard inventories. Only Finance EN may influence hyperparameters.
 
-## 3. Primary method
+## 3. Evidence-supported method components
 
-The frozen primary configuration is:
+The full completed matrix supports the following components:
 
 - VisRAG Top-50 candidate generation;
-- fixed 112-token budget per initially scored candidate;
+- fixed 112-token online scoring budget;
 - relevance prefilter of four times the final budget;
-- redundancy weight `0.25`;
-- approximate layout coverage weight `0.10`;
-- dense fusion weight `0.15`;
-- confidence threshold `0.48`;
-- Top-100 full-token recovery for low-confidence queries.
+- redundancy-aware fast MMR with weight `0.25`;
+- dense/late-interaction score fusion;
+- optional confidence-triggered Top-100 full-token recovery.
 
-The legacy query-complexity budget controller remains in code only to reproduce archived experiments. It is not part of the primary method or main claims.
+The following components are not primary claims:
+
+- adaptive budgeting: negative result and archived reproducibility only;
+- approximate layout coverage: no stable quality gain and substantial latency cost;
+- OCR fusion: optional extension only;
+- fallback: reliability operating mode unless final targeted results justify making it the default.
 
 ## 4. Finance EN development matrix
 
@@ -47,7 +50,7 @@ The legacy query-complexity budget controller remains in code only to reproduce 
 - recovery thresholds: 0.44, 0.48, 0.52;
 - dense fusion weights: 0.05, 0.15, 0.25.
 
-This matrix answers whether the frozen setting is a reasonable quality--latency operating point. Development results must be reported separately from held-out results.
+The verified development results select fixed 112 tokens and prefilter factor 4. Dense weight `0.25` outperformed `0.15` on Finance EN and therefore requires held-out confirmation before the final manuscript is frozen.
 
 ## 5. Main 13-system matrix
 
@@ -69,23 +72,37 @@ The source of truth is `configs/submission_matrix.yaml`.
 
 All selector comparisons use identical VisRAG Top-50 candidates and a fixed 112-token budget.
 
-## 6. Planned statistical comparisons
+## 6. Final targeted method-selection matrix
 
-Matrix-level comparisons isolate:
+The source of truth is `configs/final_targeted_matrix.yaml`. It contains four candidates, evaluated on all four datasets using the already exported embeddings:
 
-- AdaColRAG versus exhaustive ColPali and VisRAG dense;
-- candidate source under full-token and fixed-token scoring;
-- redundancy-only, layout-only, and combined selection versus relevance-only;
-- recovery without fusion;
-- dense fusion without recovery;
-- recovery after fusion;
-- optional OCR contribution.
+1. redundancy-only MMR, dense weight `0.25`, no fallback;
+2. redundancy-only MMR, dense weight `0.25`, fallback;
+3. redundancy plus layout MMR, dense weight `0.25`, no fallback;
+4. redundancy plus layout MMR, dense weight `0.25`, fallback.
 
-Every comparison uses paired query-level nDCG@5 with 10,000 bootstrap resamples.
+This stage answers the two remaining method-selection questions:
 
-## 7. Required outputs
+- whether layout should be deleted from the final system;
+- whether fallback should be the default or an optional reliability mode.
 
-For each dataset:
+Every pair is analyzed with 10,000 paired query-level bootstrap resamples. Each candidate also receives one warm-up and seven measured timing runs under fixed thread and CPU-affinity settings.
+
+## 7. Final selection rule
+
+The default method should be the simplest candidate satisfying all of the following:
+
+- highest or statistically indistinguishable macro nDCG@5;
+- no systematic held-out degradation;
+- materially lower latency when quality is statistically tied;
+- higher local token reduction when fallback quality gains are not significant;
+- evidence-supported components only.
+
+Fallback may remain an optional reliability mode when its quality gain is concentrated in one domain and its computation cost is substantial.
+
+## 8. Required outputs
+
+For each dataset and experiment stage:
 
 - nDCG@5/10, Recall@1/5/10, MRR@10;
 - local token reduction;
@@ -94,22 +111,36 @@ For each dataset:
 - mean/P50/P95 retrieval-stage latency;
 - fallback rate and query-level confidence traces;
 - paired bootstrap intervals and two-sided bootstrap probability;
-- one warm-up and three measured timing runs for key systems;
+- repeated timing with warm-up;
 - result and checkpoint validation;
 - hardware, package, thread, cache, dataset revision, and Git metadata.
 
-## 8. One-click execution
+## 9. Execution
+
+Completed main workflow:
 
 ```bash
 bash scripts/run_all_required_experiments.sh
 ```
 
-The command runs model and dataset preflight, Finance EN development diagnostics, the four-dataset main matrix, validation, bootstrap analysis, repeated timing, cross-dataset aggregation, and paper-table injection.
+Final targeted workflow:
 
-## 9. Interpretation rules
+```bash
+bash scripts/run_final_targeted_experiments.sh
+```
+
+Final review bundle:
+
+```bash
+bash scripts/package_final_experiment_review.sh
+```
+
+## 10. Interpretation rules
 
 - Adaptive budgeting is a reported negative result, not a contribution.
+- Approximate layout coverage is removed unless final targeted results show a reproducible gain.
 - The 50% local-token target is not a publication gate; the exact achieved value must be reported.
 - System work reduction must not be described as index-storage reduction.
 - AdaColRAG must not be described as universally superior to VisRAG unless held-out significance supports that statement.
-- Primary cross-domain claims use only the frozen configuration on Industrial, Pharmaceuticals, and Finance FR.
+- Primary cross-domain claims use frozen configurations on Industrial, Pharmaceuticals, and Finance FR.
+- Numerical claims in the final manuscript must be generated from validated result bundles, not copied from archived pilot runs.
