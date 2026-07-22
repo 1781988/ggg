@@ -1,0 +1,27 @@
+experiments:
+  - id: final_redundancy_dense025_no_fallback
+    config: configs/final_redundancy_dense025_no_fallback.yaml
+    requires_dense: true
+    group: final_candidate
+    description: Redundancy-only fast MMR with dense weight 0.25 and no fallback
+  - id: final_redundancy_dense025_fallback
+    config: configs/final_redundancy_dense025_fallback.yaml
+    requires_dense: true
+    group: final_candidate
+    description: Redundancy-only fast MMR with dense weight 0.25 and confidence fallback
+  - id: final_mmr_dense025_no_fallback
+    config: configs/final_mmr_dense025_no_fallback.yaml
+    requires_dense: true
+    group: final_candidate
+    description: Redundancy plus layout fast MMR with dense weight 0.25 and no fallback
+  - id: final_mmr_dense025_fallback
+    config: configs/final_mmr_dense025_fallback.yaml
+    requires_dense: true
+    group: final_candidate
+    description: Redundancy plus layout fast MMR with dense weight 0.25 and confidence fallback
+
+comparisons:
+  - final_redundancy_dense025_no_fallback:final_redundancy_dense025_fallback
+  - final_mmr_dense025_no_fallback:final_mmr_dense025_fallback
+  - final_redundancy_dense025_no_fallback:final_mmr_dense025_no_fallback
+  - final_redundancy_dense025_fallback:final_mmr_dense025_fallback
