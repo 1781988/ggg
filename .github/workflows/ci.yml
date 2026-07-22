@@ -99,5 +99,5 @@ jobs:
           assert '<<<<<<<' not in text
           assert '>>>>>>>' not in text
           PY
-      - run: adacolrag smoke --output /tmp/smoke.json
+      - run: adacolrag smoke --config configs/smoke.yaml --output /tmp/smoke.json
       - run: python scripts/compare_results.py --reference-smoke results/smoke_reference.json --candidate-smoke /tmp/smoke.json
