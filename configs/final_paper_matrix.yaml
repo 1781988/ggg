@@ -53,7 +53,7 @@ experiments:
     config: configs/adacolrag.yaml
     requires_dense: true
     group: proposed
-    description: Final method: VisRAG Top-50, fixed-112 redundancy-aware selection, dense weight 0.25, no fallback
+    description: "Final method: VisRAG Top-50, fixed-112 redundancy-aware selection, dense weight 0.25, no fallback"
 
 comparisons:
   - colpali_full:adacolrag
