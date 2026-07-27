@@ -1,0 +1,76 @@
+experiments:
+  - id: dev_fixed_64
+    config: configs/dev_visrag_top50_fixed_64.yaml
+    requires_dense: true
+    group: budget_sensitivity
+    description: VisRAG Top-50 with 64 relevance-selected tokens
+  - id: dev_fixed_96
+    config: configs/dev_visrag_top50_fixed_96.yaml
+    requires_dense: true
+    group: budget_sensitivity
+    description: VisRAG Top-50 with 96 relevance-selected tokens
+  - id: dev_fixed_112
+    config: configs/visrag_top50_fixed_112.yaml
+    requires_dense: true
+    group: budget_sensitivity
+    description: VisRAG Top-50 with 112 relevance-selected tokens
+  - id: dev_fixed_128
+    config: configs/visrag_top50_fixed_128.yaml
+    requires_dense: true
+    group: budget_sensitivity
+    description: VisRAG Top-50 with 128 relevance-selected tokens
+  - id: dev_mmr_factor2
+    config: configs/dev_visrag_top50_mmr_factor2.yaml
+    requires_dense: true
+    group: selector_speed_quality
+    description: Fixed-112 MMR after relevance prefiltering to 2x budget
+  - id: dev_mmr_factor4
+    config: configs/visrag_top50_mmr.yaml
+    requires_dense: true
+    group: selector_speed_quality
+    description: Fixed-112 MMR after relevance prefiltering to 4x budget
+  - id: dev_mmr_exact
+    config: configs/dev_visrag_top50_mmr_exact.yaml
+    requires_dense: true
+    group: selector_speed_quality
+    description: Exact fixed-112 MMR over all page tokens
+  - id: dev_threshold_044
+    config: configs/dev_adacolrag_threshold_044.yaml
+    requires_dense: true
+    group: fallback_sensitivity
+    description: AdaColRAG with fallback threshold 0.44
+  - id: dev_threshold_048
+    config: configs/adacolrag.yaml
+    requires_dense: true
+    group: fallback_sensitivity
+    description: AdaColRAG with fallback threshold 0.48
+  - id: dev_threshold_052
+    config: configs/dev_adacolrag_threshold_052.yaml
+    requires_dense: true
+    group: fallback_sensitivity
+    description: AdaColRAG with fallback threshold 0.52
+  - id: dev_dense_005
+    config: configs/dev_adacolrag_dense_005.yaml
+    requires_dense: true
+    group: fusion_sensitivity
+    description: AdaColRAG with dense fusion weight 0.05
+  - id: dev_dense_015
+    config: configs/adacolrag.yaml
+    requires_dense: true
+    group: fusion_sensitivity
+    description: AdaColRAG with dense fusion weight 0.15
+  - id: dev_dense_025
+    config: configs/dev_adacolrag_dense_025.yaml
+    requires_dense: true
+    group: fusion_sensitivity
+    description: AdaColRAG with dense fusion weight 0.25
+
+comparisons:
+  - dev_fixed_96:dev_fixed_112
+  - dev_fixed_112:dev_fixed_128
+  - dev_mmr_factor2:dev_mmr_factor4
+  - dev_mmr_factor4:dev_mmr_exact
+  - dev_threshold_044:dev_threshold_048
+  - dev_threshold_048:dev_threshold_052
+  - dev_dense_005:dev_dense_015
+  - dev_dense_015:dev_dense_025

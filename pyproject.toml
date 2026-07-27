@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "adacolrag"
+version = "0.1.0"
+description = "Query-adaptive visual token compression for multimodal document retrieval"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+license = {text = "MIT"}
+authors = [{name = "AdaColRAG Contributors"}]
+dependencies = [
+  "numpy>=1.26,<3",
+  "PyYAML>=6.0,<7",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "ruff>=0.6,<1"]
+export = ["pillow>=10,<13", "tqdm>=4.66,<5"]
+
+[project.scripts]
+adacolrag = "adacolrag.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adacolrag"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]

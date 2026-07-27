@@ -1,0 +1,65 @@
+experiments:
+  - id: visrag_dense
+    config: configs/visrag_dense.yaml
+    requires_dense: true
+    group: external_baseline
+    description: VisRAG-Ret dense-only retrieval over the full corpus
+  - id: colpali_full
+    config: configs/colpali_full.yaml
+    requires_dense: false
+    group: exhaustive_baseline
+    description: Exhaustive full-token ColPali over every page
+  - id: colpali_mean_top50_full
+    config: configs/colpali_mean_top50_full.yaml
+    requires_dense: false
+    group: candidate_control
+    description: ColPali mean-vector Top-50 followed by full-token ColPali
+  - id: visrag_top50_full
+    config: configs/visrag_top50_full.yaml
+    requires_dense: true
+    group: candidate_control
+    description: VisRAG Top-50 followed by full-token ColPali
+  - id: colpali_mean_top50_fixed_112
+    config: configs/colpali_mean_top50_fixed_112.yaml
+    requires_dense: false
+    group: candidate_control
+    description: ColPali mean-vector Top-50 with 112 relevance-selected tokens
+  - id: visrag_top50_fixed_112
+    config: configs/visrag_top50_fixed_112.yaml
+    requires_dense: true
+    group: token_baseline
+    description: VisRAG Top-50 with 112 relevance-selected tokens
+  - id: visrag_top50_mmr_redundancy
+    config: configs/visrag_top50_mmr_redundancy.yaml
+    requires_dense: true
+    group: selector_ablation
+    description: Fixed-112 redundancy-only selector without dense fusion
+  - id: visrag_top50_mmr_layout
+    config: configs/visrag_top50_mmr_layout.yaml
+    requires_dense: true
+    group: negative_ablation
+    description: Fixed-112 layout-only selector; retained as a negative ablation
+  - id: adacolrag_layout
+    config: configs/final_mmr_dense025_no_fallback.yaml
+    requires_dense: true
+    group: negative_ablation
+    description: Final dense fusion with redundancy and approximate layout coverage
+  - id: adacolrag_fallback
+    config: configs/final_redundancy_dense025_fallback.yaml
+    requires_dense: true
+    group: optional_reliability
+    description: Final redundancy-only selector with confidence-triggered recovery
+  - id: adacolrag
+    config: configs/adacolrag.yaml
+    requires_dense: true
+    group: proposed
+    description: "Final method: VisRAG Top-50, fixed-112 redundancy-aware selection, dense weight 0.25, no fallback"
+
+comparisons:
+  - colpali_full:adacolrag
+  - visrag_dense:adacolrag
+  - visrag_top50_full:adacolrag
+  - visrag_top50_fixed_112:adacolrag
+  - visrag_top50_mmr_redundancy:adacolrag
+  - adacolrag_layout:adacolrag
+  - adacolrag_fallback:adacolrag

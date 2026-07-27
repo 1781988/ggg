@@ -1,0 +1,10 @@
+seed: 42
+mode: fixed
+fixed_tokens: 32
+candidate_pool: 50
+top_k: 10
+fusion:
+  dense_weight: 0.0
+  lexical_weight: 0.0
+fallback:
+  enabled: false

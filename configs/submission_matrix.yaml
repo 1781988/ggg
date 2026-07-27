@@ -1,0 +1,79 @@
+experiments:
+  - id: visrag_dense
+    config: configs/visrag_dense.yaml
+    requires_dense: true
+    group: external_baseline
+    description: VisRAG-Ret dense-only retrieval over the full corpus
+  - id: colpali_full
+    config: configs/colpali_full.yaml
+    requires_dense: false
+    group: exhaustive_baseline
+    description: Exhaustive full-token ColPali over every page
+  - id: colpali_mean_top50_full
+    config: configs/colpali_mean_top50_full.yaml
+    requires_dense: false
+    group: candidate_control
+    description: ColPali mean-vector Top-50 followed by full-token ColPali
+  - id: visrag_top50_full
+    config: configs/visrag_top50_full.yaml
+    requires_dense: true
+    group: candidate_control
+    description: VisRAG Top-50 followed by full-token ColPali without fusion
+  - id: colpali_mean_top50_fixed_112
+    config: configs/colpali_mean_top50_fixed_112.yaml
+    requires_dense: false
+    group: candidate_control
+    description: ColPali mean-vector Top-50 with 112 relevance-selected tokens
+  - id: visrag_top50_fixed_112
+    config: configs/visrag_top50_fixed_112.yaml
+    requires_dense: true
+    group: token_baseline
+    description: VisRAG Top-50 with 112 relevance-selected tokens
+  - id: visrag_top50_mmr_redundancy
+    config: configs/visrag_top50_mmr_redundancy.yaml
+    requires_dense: true
+    group: selector_ablation
+    description: Fixed-112 fast MMR with redundancy suppression only
+  - id: visrag_top50_mmr_layout
+    config: configs/visrag_top50_mmr_layout.yaml
+    requires_dense: true
+    group: selector_ablation
+    description: Fixed-112 fast MMR with layout coverage only
+  - id: visrag_top50_mmr
+    config: configs/visrag_top50_mmr.yaml
+    requires_dense: true
+    group: selector_ablation
+    description: Fixed-112 fast MMR with redundancy and layout coverage
+  - id: visrag_top50_mmr_fallback
+    config: configs/visrag_top50_mmr_fallback.yaml
+    requires_dense: true
+    group: recovery_ablation
+    description: Fast MMR with confidence-triggered full-token recovery and no dense fusion
+  - id: adacolrag_no_fallback
+    config: configs/adacolrag_no_fallback.yaml
+    requires_dense: true
+    group: fusion_ablation
+    description: Fast MMR with dense score fusion and no fallback
+  - id: adacolrag
+    config: configs/adacolrag.yaml
+    requires_dense: true
+    group: proposed
+    description: Fast MMR, dense score fusion, and confidence-aware full-token recovery
+  - id: adacolrag_ocr
+    config: configs/adacolrag_ocr.yaml
+    requires_dense: true
+    group: extension
+    description: AdaColRAG with additional OCR lexical fusion
+
+comparisons:
+  - colpali_full:adacolrag
+  - visrag_dense:adacolrag
+  - colpali_mean_top50_full:visrag_top50_full
+  - colpali_mean_top50_fixed_112:visrag_top50_fixed_112
+  - visrag_top50_fixed_112:visrag_top50_mmr_redundancy
+  - visrag_top50_fixed_112:visrag_top50_mmr_layout
+  - visrag_top50_fixed_112:visrag_top50_mmr
+  - visrag_top50_mmr:visrag_top50_mmr_fallback
+  - visrag_top50_mmr:adacolrag_no_fallback
+  - adacolrag_no_fallback:adacolrag
+  - adacolrag:adacolrag_ocr
