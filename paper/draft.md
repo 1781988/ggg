@@ -201,7 +201,12 @@ Finance EN development supports Fixed-112 over Fixed-96, prefilter factor 4 over
 
 <!-- BEGIN AUTO:FINAL_SELECTION -->
 
-_Final candidate selection table will be inserted by `scripts/run_paper_finalization.sh`._
+| Candidate | Macro nDCG@5 | Macro nDCG@10 | Macro local reduction | Macro fallback rate |
+|---|---:|---:|---:|---:|
+| final_mmr_dense025_fallback | 0.4643 | 0.4895 | 46.29% | 46.61% |
+| final_mmr_dense025_no_fallback | 0.4636 | 0.4867 | 89.06% | 0.00% |
+| final_redundancy_dense025_fallback | 0.4633 | 0.4890 | 45.91% | 47.44% |
+| final_redundancy_dense025_no_fallback | 0.4656 | 0.4874 | 89.06% | 0.00% |
 
 <!-- END AUTO:FINAL_SELECTION -->
 
@@ -211,7 +216,38 @@ The selected method is redundancy-only selection with dense weight 0.25 and no r
 
 <!-- BEGIN AUTO:FINAL_MAIN_RESULTS -->
 
-_Final cross-domain retrieval table will be inserted by `scripts/run_paper_finalization.sh`._
+| Dataset | Method | nDCG@5 | nDCG@10 | R@10 | MRR@10 |
+|---|---|---:|---:|---:|---:|
+| vidore_v3_finance_en | visrag_dense | 0.4744 | 0.5099 | 0.5755 | 0.6501 |
+| vidore_v3_finance_en | colpali_full | 0.4387 | 0.4568 | 0.4891 | 0.5855 |
+| vidore_v3_finance_en | visrag_top50_full | 0.4546 | 0.4858 | 0.5354 | 0.6067 |
+| vidore_v3_finance_en | visrag_top50_fixed_112 | 0.4211 | 0.4490 | 0.5147 | 0.5590 |
+| vidore_v3_finance_en | visrag_top50_mmr_redundancy | 0.4328 | 0.4686 | 0.5296 | 0.5794 |
+| vidore_v3_finance_en | adacolrag_final | 0.4966 | 0.5254 | 0.5730 | 0.6615 |
+| vidore_v3_industrial | visrag_dense | 0.3859 | 0.4075 | 0.4666 | 0.4982 |
+| vidore_v3_industrial | colpali_full | 0.4584 | 0.4695 | 0.4832 | 0.5834 |
+| vidore_v3_industrial | visrag_top50_full | 0.4619 | 0.4766 | 0.4944 | 0.5840 |
+| vidore_v3_industrial | visrag_top50_fixed_112 | 0.4088 | 0.4304 | 0.4651 | 0.5234 |
+| vidore_v3_industrial | visrag_top50_mmr_redundancy | 0.4437 | 0.4644 | 0.4915 | 0.5701 |
+| vidore_v3_industrial | adacolrag_final | 0.4688 | 0.4819 | 0.5041 | 0.5886 |
+| vidore_v3_pharmaceuticals | visrag_dense | 0.5635 | 0.5833 | 0.6390 | 0.6796 |
+| vidore_v3_pharmaceuticals | colpali_full | 0.5599 | 0.5848 | 0.6381 | 0.6744 |
+| vidore_v3_pharmaceuticals | visrag_top50_full | 0.5639 | 0.5935 | 0.6551 | 0.6830 |
+| vidore_v3_pharmaceuticals | visrag_top50_fixed_112 | 0.5311 | 0.5588 | 0.6094 | 0.6467 |
+| vidore_v3_pharmaceuticals | visrag_top50_mmr_redundancy | 0.5598 | 0.5833 | 0.6324 | 0.6806 |
+| vidore_v3_pharmaceuticals | adacolrag_final | 0.6006 | 0.6240 | 0.6721 | 0.7220 |
+| vidore_v3_finance_fr | visrag_dense | 0.2335 | 0.2651 | 0.3270 | 0.3400 |
+| vidore_v3_finance_fr | colpali_full | 0.2414 | 0.2672 | 0.3221 | 0.3409 |
+| vidore_v3_finance_fr | visrag_top50_full | 0.2641 | 0.2893 | 0.3556 | 0.3624 |
+| vidore_v3_finance_fr | visrag_top50_fixed_112 | 0.2505 | 0.2792 | 0.3427 | 0.3478 |
+| vidore_v3_finance_fr | visrag_top50_mmr_redundancy | 0.2583 | 0.2906 | 0.3633 | 0.3599 |
+| vidore_v3_finance_fr | adacolrag_final | 0.2962 | 0.3183 | 0.3839 | 0.3861 |
+| macro_average | visrag_dense | 0.4143 | 0.4414 | 0.5020 | 0.5420 |
+| macro_average | colpali_full | 0.4246 | 0.4446 | 0.4831 | 0.5461 |
+| macro_average | visrag_top50_full | 0.4361 | 0.4613 | 0.5101 | 0.5591 |
+| macro_average | visrag_top50_fixed_112 | 0.4029 | 0.4293 | 0.4830 | 0.5192 |
+| macro_average | visrag_top50_mmr_redundancy | 0.4236 | 0.4517 | 0.5042 | 0.5475 |
+| macro_average | adacolrag_final | 0.4656 | 0.4874 | 0.5333 | 0.5896 |
 
 <!-- END AUTO:FINAL_MAIN_RESULTS -->
 
@@ -221,7 +257,36 @@ The final method reaches 0.4966, 0.4688, 0.6006, and 0.2962 nDCG@5 on Finance EN
 
 <!-- BEGIN AUTO:FINAL_SIGNIFICANCE -->
 
-_Final-method paired bootstrap table will be inserted by `scripts/run_paper_finalization.sh`._
+| Dataset | Baseline | Baseline | Final | ΔnDCG@5 | 95% CI | p | Final better queries |
+|---|---|---:|---:|---:|---:|---:|---:|
+| vidore_v3_finance_en | visrag_dense | 0.4744 | 0.4966 | +0.0223 | [-0.0072, +0.0532] | 0.1478 | 33.01% |
+| vidore_v3_finance_en | colpali_full | 0.4387 | 0.4966 | +0.0579 | [+0.0330, +0.0828] | 0.0000 | 38.51% |
+| vidore_v3_finance_en | visrag_top50_full | 0.4546 | 0.4966 | +0.0421 | [+0.0217, +0.0631] | 0.0000 | 35.92% |
+| vidore_v3_finance_en | visrag_top50_fixed_112 | 0.4211 | 0.4966 | +0.0755 | [+0.0543, +0.0984] | 0.0000 | 41.75% |
+| vidore_v3_finance_en | visrag_top50_mmr_redundancy | 0.4328 | 0.4966 | +0.0639 | [+0.0450, +0.0837] | 0.0000 | 39.81% |
+| vidore_v3_finance_en | adacolrag_no_fallback | 0.4796 | 0.4966 | +0.0170 | [+0.0058, +0.0282] | 0.0016 | 20.39% |
+| vidore_v3_finance_en | adacolrag | 0.4813 | 0.4966 | +0.0153 | [+0.0011, +0.0297] | 0.0354 | 22.65% |
+| vidore_v3_industrial | visrag_dense | 0.3859 | 0.4688 | +0.0829 | [+0.0526, +0.1137] | 0.0000 | 36.75% |
+| vidore_v3_industrial | colpali_full | 0.4584 | 0.4688 | +0.0103 | [-0.0102, +0.0310] | 0.3382 | 27.56% |
+| vidore_v3_industrial | visrag_top50_full | 0.4619 | 0.4688 | +0.0068 | [-0.0117, +0.0262] | 0.4800 | 24.38% |
+| vidore_v3_industrial | visrag_top50_fixed_112 | 0.4088 | 0.4688 | +0.0599 | [+0.0327, +0.0886] | 0.0000 | 30.74% |
+| vidore_v3_industrial | visrag_top50_mmr_redundancy | 0.4437 | 0.4688 | +0.0250 | [+0.0073, +0.0423] | 0.0056 | 27.56% |
+| vidore_v3_industrial | adacolrag_no_fallback | 0.4578 | 0.4688 | +0.0109 | [-0.0013, +0.0231] | 0.0808 | 18.37% |
+| vidore_v3_industrial | adacolrag | 0.4717 | 0.4688 | -0.0029 | [-0.0158, +0.0095] | 0.6434 | 17.67% |
+| vidore_v3_pharmaceuticals | visrag_dense | 0.5635 | 0.6006 | +0.0371 | [+0.0155, +0.0592] | 0.0014 | 36.54% |
+| vidore_v3_pharmaceuticals | colpali_full | 0.5599 | 0.6006 | +0.0408 | [+0.0212, +0.0609] | 0.0000 | 31.04% |
+| vidore_v3_pharmaceuticals | visrag_top50_full | 0.5639 | 0.6006 | +0.0367 | [+0.0185, +0.0550] | 0.0000 | 30.77% |
+| vidore_v3_pharmaceuticals | visrag_top50_fixed_112 | 0.5311 | 0.6006 | +0.0695 | [+0.0469, +0.0925] | 0.0000 | 35.71% |
+| vidore_v3_pharmaceuticals | visrag_top50_mmr_redundancy | 0.5598 | 0.6006 | +0.0409 | [+0.0246, +0.0579] | 0.0000 | 30.77% |
+| vidore_v3_pharmaceuticals | adacolrag_no_fallback | 0.5851 | 0.6006 | +0.0155 | [+0.0059, +0.0257] | 0.0016 | 17.86% |
+| vidore_v3_pharmaceuticals | adacolrag | 0.5867 | 0.6006 | +0.0139 | [+0.0008, +0.0274] | 0.0384 | 22.25% |
+| vidore_v3_finance_fr | visrag_dense | 0.2335 | 0.2962 | +0.0627 | [+0.0368, +0.0892] | 0.0000 | 34.38% |
+| vidore_v3_finance_fr | colpali_full | 0.2414 | 0.2962 | +0.0548 | [+0.0304, +0.0799] | 0.0000 | 34.69% |
+| vidore_v3_finance_fr | visrag_top50_full | 0.2641 | 0.2962 | +0.0321 | [+0.0134, +0.0509] | 0.0008 | 27.50% |
+| vidore_v3_finance_fr | visrag_top50_fixed_112 | 0.2505 | 0.2962 | +0.0457 | [+0.0239, +0.0684] | 0.0000 | 28.12% |
+| vidore_v3_finance_fr | visrag_top50_mmr_redundancy | 0.2583 | 0.2962 | +0.0379 | [+0.0191, +0.0570] | 0.0004 | 28.75% |
+| vidore_v3_finance_fr | adacolrag_no_fallback | 0.2813 | 0.2962 | +0.0149 | [+0.0031, +0.0269] | 0.0146 | 20.31% |
+| vidore_v3_finance_fr | adacolrag | 0.2855 | 0.2962 | +0.0107 | [-0.0028, +0.0239] | 0.1214 | 21.25% |
 
 <!-- END AUTO:FINAL_SIGNIFICANCE -->
 
@@ -231,7 +296,12 @@ Primary claims are based on nDCG@5 intervals for the final method against VisRAG
 
 <!-- BEGIN AUTO:FINAL_EFFICIENCY -->
 
-_Final deterministic efficiency table will be inserted by `scripts/run_paper_finalization.sh`._
+| Dataset | Tokens/op. | Local reduction | Visual tokens/query | Page ops/query | System token-work reduction | Page-op reduction |
+|---|---:|---:|---:|---:|---:|---:|
+| vidore_v3_finance_en | 112.0 | 89.06% | 5600.0 | 50.0 | 99.81% | 98.30% |
+| vidore_v3_industrial | 112.0 | 89.06% | 5600.0 | 50.0 | 99.90% | 99.05% |
+| vidore_v3_pharmaceuticals | 112.0 | 89.06% | 5600.0 | 50.0 | 99.76% | 97.84% |
+| vidore_v3_finance_fr | 112.0 | 89.06% | 5600.0 | 50.0 | 99.77% | 97.90% |
 
 <!-- END AUTO:FINAL_EFFICIENCY -->
 
@@ -241,7 +311,24 @@ The final method always scores 50 candidates with 112 selected visual tokens, or
 
 <!-- BEGIN AUTO:FINAL_STEADY_TIMING -->
 
-_Single-process steady-state timing will be inserted by `scripts/run_paper_finalization.sh`._
+| Dataset | Method | Repeats | Median run mean (ms) | Run IQR (ms) | Query median (ms) | Query p95 (ms) | CV |
+|---|---|---:|---:|---:|---:|---:|---:|
+| vidore_v3_finance_en | adacolrag | 7 | 69.82 | 0.21 | 69.79 | 71.04 | 0.002 |
+| vidore_v3_finance_en | colpali_full | 7 | 774.50 | 9.93 | 768.62 | 799.94 | 0.023 |
+| vidore_v3_finance_en | visrag_dense | 7 | 26.01 | 1.74 | 27.85 | 39.57 | 0.038 |
+| vidore_v3_finance_en | visrag_top50_full | 7 | 8.77 | 0.03 | 8.76 | 9.40 | 0.004 |
+| vidore_v3_industrial | adacolrag | 7 | 74.95 | 0.21 | 74.90 | 76.16 | 0.003 |
+| vidore_v3_industrial | colpali_full | 7 | 88060.51 | 34712.63 | 81432.15 | 202842.06 | 0.338 |
+| vidore_v3_industrial | visrag_dense | 7 | 14.64 | 0.28 | 15.93 | 18.40 | 0.015 |
+| vidore_v3_industrial | visrag_top50_full | 7 | 18.14 | 0.30 | 18.09 | 1382.59 | 2.372 |
+| vidore_v3_pharmaceuticals | adacolrag | 7 | 69.44 | 0.45 | 69.42 | 70.77 | 0.007 |
+| vidore_v3_pharmaceuticals | colpali_full | 7 | 622.79 | 3.89 | 620.67 | 660.76 | 0.014 |
+| vidore_v3_pharmaceuticals | visrag_dense | 7 | 14.66 | 12.73 | 11.52 | 16.08 | 0.765 |
+| vidore_v3_pharmaceuticals | visrag_top50_full | 7 | 8.59 | 0.03 | 8.58 | 9.25 | 0.010 |
+| vidore_v3_finance_fr | adacolrag | 7 | 68.78 | 0.65 | 68.60 | 76.20 | 0.019 |
+| vidore_v3_finance_fr | colpali_full | 7 | 659.20 | 3.44 | 656.51 | 696.53 | 0.008 |
+| vidore_v3_finance_fr | visrag_dense | 7 | 15.68 | 0.11 | 15.97 | 16.05 | 0.004 |
+| vidore_v3_finance_fr | visrag_top50_full | 7 | 8.80 | 0.95 | 8.84 | 13.16 | 0.071 |
 
 <!-- END AUTO:FINAL_STEADY_TIMING -->
 
