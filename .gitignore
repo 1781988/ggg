@@ -17,3 +17,26 @@ logs/
 *.egg-info/
 dist/
 build/
+# datasets
+data/
+
+# pretrained models
+models/
+
+# experiment results
+results/
+
+# logs
+logs/
+
+# cache
+.cache/
+.hf_cache/
+
+# paper
+paper/
+
+# temporary
+*.tar.gz
+*.log
+env.sh
